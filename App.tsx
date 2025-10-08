@@ -11,6 +11,11 @@ type AppStep = 'input' | 'loading' | 'review' | 'error';
 export type BackgroundChoice = { type: 'ai' } | { type: 'upload', file: File } | { type: 'library', url: string };
 export type LogoPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
+const isRtl = (text: string) => {
+    const rtlRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+    return rtlRegex.test(text);
+};
+
 const App: React.FC = () => {
   const [step, setStep] = useState<AppStep>('input');
   const [generatedContent, setGeneratedContent] = useState<GeneratedTextContent | null>(null);
@@ -22,7 +27,7 @@ const App: React.FC = () => {
   const [backgroundType, setBackgroundType] = useState<BackgroundChoice['type'] | null>(null);
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
 
-  const combineImages = useCallback(async (baseImageSrc: string, logoFile: File, headline: string, logoPosition: LogoPosition): Promise<string> => {
+  const combineImages = useCallback(async (baseImageSrc: string, logoFile: File, headline: string, logoPosition: LogoPosition, fontFamily: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -52,9 +57,13 @@ const App: React.FC = () => {
 
           // --- Draw Headline Text ---
           const fontSize = Math.max(24, Math.round(canvas.width / 22));
-          ctx.font = `700 ${fontSize}px 'Noto Sans', sans-serif`;
+          ctx.font = `700 ${fontSize}px ${fontFamily}`;
           ctx.fillStyle = 'white';
-          ctx.textAlign = 'left';
+          
+          const textIsRtl = isRtl(headline);
+          ctx.direction = textIsRtl ? 'rtl' : 'ltr';
+          ctx.textAlign = textIsRtl ? 'right' : 'left';
+          
           ctx.textBaseline = 'bottom';
 
           const textToDraw = headline.toUpperCase();
@@ -77,9 +86,10 @@ const App: React.FC = () => {
           
           const textBlockHeight = (lines.length -1) * lineHeight;
           const startY = canvas.height - padding - textBlockHeight;
+          const startX = textIsRtl ? canvas.width - padding : padding;
 
           lines.forEach((l, i) => {
-            ctx.fillText(l, padding, startY + (i * lineHeight));
+            ctx.fillText(l, startX, startY + (i * lineHeight));
           });
           
           // --- Draw Logo ---
@@ -165,7 +175,7 @@ const App: React.FC = () => {
       }
       
       setBaseImageSrc(generatedBaseImageSrc);
-      const compositeImage = await combineImages(generatedBaseImageSrc, logo, textData.headline1, 'bottom-right');
+      const compositeImage = await combineImages(generatedBaseImageSrc, logo, textData.headline1, 'bottom-right', "'Noto Sans', sans-serif");
 
       setGeneratedContent(textData);
       setInitialFinalImage(compositeImage);

@@ -59,9 +59,8 @@ export const InputForm: React.FC<InputFormProps> = ({ onGenerate }) => {
     if (!files || files.length === 0) return;
 
     if (type === 'logo') {
-        // Fix: Use files.item(0) to get a properly typed `File | null` object.
-        const file = files.item(0);
-        // Fix: Add a null check for file and then access its properties to prevent type errors.
+        // FIX: Replaced `files.item(0)` with `files[0]` to ensure correct type inference for the `File` object.
+        const file = files[0];
         if (file && file.type.startsWith('image/')) {
             setLogo(file);
             if (logoPreview) URL.revokeObjectURL(logoPreview);
@@ -101,9 +100,8 @@ export const InputForm: React.FC<InputFormProps> = ({ onGenerate }) => {
       if (!files || files.length === 0) return;
 
       if (type === 'logo') {
-        // Fix: Use files.item(0) to get a properly typed `File | null` object.
-        const file = files.item(0);
-        // Fix: Add a null check for file and then access its properties to prevent type errors.
+        // FIX: Replaced `files.item(0)` with `files[0]` to ensure correct type inference for the `File` object.
+        const file = files[0];
         if (file && file.type.startsWith('image/')) {
             setLogo(file);
             if (logoPreview) URL.revokeObjectURL(logoPreview);

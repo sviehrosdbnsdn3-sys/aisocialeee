@@ -12,18 +12,33 @@ interface ReviewPanelProps {
   logoFile: File;
   onStartOver: () => void;
   originalContent: string;
-  combineImages: (baseImageSrc: string, logoFile: File, headline: string, logoPosition: LogoPosition) => Promise<string>;
+  combineImages: (baseImageSrc: string, logoFile: File, headline: string, logoPosition: LogoPosition, fontFamily: string) => Promise<string>;
   backgroundType: BackgroundChoice['type'];
   onRegenerateImage: () => void;
   isRegeneratingImage: boolean;
 }
 
-type FontStyle = 'sans-serif' | 'serif' | 'monospace';
+type FontStyle = 'sans-serif' | 'serif' | 'monospace' | 'jameel-noori' | 'mb-sindhi';
 
 const fontStyles: Record<FontStyle, React.CSSProperties> = {
   'sans-serif': { fontFamily: "'Noto Sans', sans-serif" },
   'serif': { fontFamily: "'Noto Serif', serif" },
   'monospace': { fontFamily: "'Noto Sans Mono', monospace" },
+  'jameel-noori': { fontFamily: "'Jameel Noori Nastaleeq', cursive" },
+  'mb-sindhi': { fontFamily: "'MB Sindhi', sans-serif" },
+};
+
+const fontDisplayNames: Record<FontStyle, string> = {
+    'sans-serif': 'Sans Serif',
+    'serif': 'Serif',
+    'monospace': 'Monospace',
+    'jameel-noori': 'Jameel Noori',
+    'mb-sindhi': 'MB Sindhi',
+};
+
+const isRtl = (text: string) => {
+    const rtlRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+    return rtlRegex.test(text);
 };
 
 const CopyableField: React.FC<{ text: string; style: React.CSSProperties }> = ({ text, style }) => {
@@ -35,9 +50,16 @@ const CopyableField: React.FC<{ text: string; style: React.CSSProperties }> = ({
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const textIsRtl = isRtl(text);
+    const pStyle: React.CSSProperties = {
+        ...style,
+        direction: textIsRtl ? 'rtl' : 'ltr',
+        textAlign: textIsRtl ? 'right' : 'left',
+    };
+
     return (
         <div className="relative">
-            <p className="bg-gray-900 p-4 rounded-lg border border-gray-700 text-gray-300 pr-12" style={style}>{text}</p>
+            <p className="bg-gray-900 p-4 rounded-lg border border-gray-700 text-gray-300 pr-12" style={pStyle}>{text}</p>
             <button
                 onClick={handleCopy}
                 className="absolute top-1/2 right-3 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition"
@@ -71,6 +93,13 @@ const HeadlineEditor: React.FC<{
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const textIsRtl = isRtl(value);
+    const inputStyle: React.CSSProperties = {
+        ...fontStyle,
+        direction: textIsRtl ? 'rtl' : 'ltr',
+        textAlign: textIsRtl ? 'right' : 'left',
+    };
+
     return (
         <div className="flex items-center gap-3">
             <input 
@@ -89,7 +118,7 @@ const HeadlineEditor: React.FC<{
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 pr-24 text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                    style={fontStyle}
+                    style={inputStyle}
                 />
                 <div className="absolute top-1/2 right-2 -translate-y-1/2 flex items-center gap-1">
                     <button onClick={handleCopy} className="p-2 text-gray-400 hover:text-white transition" aria-label="Copy headline">
@@ -124,7 +153,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ content, initialFinalI
         if (!baseImageSrc || !logoFile || !headlineToRender.trim()) return;
         setIsCombining(true);
         try {
-          const newImage = await combineImages(baseImageSrc, logoFile, headlineToRender, logoPosition);
+          const fontFamily = fontStyles[selectedFont].fontFamily as string;
+          const newImage = await combineImages(baseImageSrc, logoFile, headlineToRender, logoPosition, fontFamily);
           setFinalImage(newImage);
         } catch (error) {
           console.error("Failed to regenerate image:", error);
@@ -138,7 +168,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ content, initialFinalI
     return () => {
       clearTimeout(handler);
     };
-  }, [headlineToRender, logoPosition, baseImageSrc, logoFile, combineImages]);
+  }, [headlineToRender, logoPosition, baseImageSrc, logoFile, combineImages, selectedFont]);
 
   const handleRewrite = async (headlineToRewrite: 'h1' | 'h2') => {
     setRewriting(headlineToRewrite);
@@ -247,19 +277,19 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ content, initialFinalI
         <div className="space-y-6">
            <div>
             <h3 className="text-lg font-semibold text-gray-300 mb-2">Font Style</h3>
-            <div className="flex space-x-2">
-              {(['sans-serif', 'serif', 'monospace'] as FontStyle[]).map((font) => (
+            <div className="flex flex-wrap gap-2">
+              {(['sans-serif', 'serif', 'monospace', 'jameel-noori', 'mb-sindhi'] as FontStyle[]).map((font) => (
                 <button
                   key={font}
                   onClick={() => setSelectedFont(font)}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     selectedFont === font
                       ? 'bg-indigo-600 text-white'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                   style={fontStyles[font]}
                 >
-                  {font}
+                  {fontDisplayNames[font]}
                 </button>
               ))}
             </div>
