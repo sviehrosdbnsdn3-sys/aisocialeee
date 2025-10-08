@@ -1,0 +1,20 @@
+{
+  "files": [
+    "App.tsx",
+    "components/InputForm.tsx",
+    "components/LoadingSpinner.tsx",
+    "components/ReviewPanel.tsx",
+    "components/icons.tsx",
+    "index.html",
+    "index.tsx",
+    "metadata.json",
+    "services/geminiService.ts",
+    "types.ts"
+  ],
+  "routes": [
+    {
+      "src": "/.*",
+      "dest": "/index.html"
+    }
+  ]
+}

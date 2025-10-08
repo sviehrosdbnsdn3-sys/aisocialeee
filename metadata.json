@@ -1,0 +1,5 @@
+{
+  "name": "AI Social Post Creator",
+  "description": "An application that uses AI to generate catchy headlines, a summary, and a branded image for a social media post based on user-provided content and a logo.",
+  "requestFramePermissions": []
+}
