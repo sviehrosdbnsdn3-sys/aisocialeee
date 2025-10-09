@@ -1,10 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { GeneratedTextContent } from '../types';
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
-
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const textGenSchema = {
@@ -26,8 +22,12 @@ const textGenSchema = {
       type: Type.STRING,
       description: 'A detailed, safe-for-work prompt for an AI image generator to create a compelling, photorealistic, high-resolution (1024x1024) visual for the news. It must follow specific rules: if the content mentions a person, describe a generic, non-identifiable individual in that context. If it mentions a country, describe its scenery or culture. Otherwise, represent the overall theme. The prompt must incorporate the requested image style.',
     },
+    hashtags: {
+      type: Type.STRING,
+      description: 'A single string containing 5-7 relevant and trending hashtags, each starting with # and separated by spaces (e.g., #Tech #News #Innovation).',
+    },
   },
-  required: ['headline1', 'headline2', 'about', 'imagePrompt'],
+  required: ['headline1', 'headline2', 'about', 'imagePrompt', 'hashtags'],
 };
 
 export const generateTextAndImagePrompt = async (content: string, tone: string, audience: string, imageStyle: string): Promise<GeneratedTextContent> => {
@@ -36,7 +36,7 @@ export const generateTextAndImagePrompt = async (content: string, tone: string, 
       audienceInstruction = `an audience of ${audience.trim()}`;
   }
   
-  const prompt = `Your task is to act as a social media manager. Based on the following news content, generate two distinct headlines, a short "about" summary, and a descriptive prompt for an image generator.
+  const prompt = `Your task is to act as a social media manager. Based on the following news content, generate two distinct headlines, a short "about" summary, a descriptive prompt for an image generator, and a list of relevant hashtags.
 
 **Content Analysis Rules for Image Prompt:**
 1.  **Detect Person's Name:** If the content mentions a specific person's name, the image prompt must describe a generic, non-identifiable person representing their role or context. DO NOT attempt to depict the actual person. For example, for a story about a specific tech CEO, describe "a confident tech executive presenting on a futuristic stage," not the specific person.
@@ -108,4 +108,22 @@ export const generateImage = async (prompt: string): Promise<string> => {
   }
 
   return response.generatedImages[0].image.imageBytes;
+};
+
+export const getContentFromURL = async (url: string): Promise<string> => {
+  const prompt = `You are a web scraper. Your task is to extract the main article or content from the given URL. 
+Return only the clean, unformatted text of the article. Exclude headers, footers, ads, navigation menus, and comments.
+
+URL: ${url}`;
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gem-2.5-flash',
+      contents: prompt,
+    });
+    return response.text.trim();
+  } catch (error) {
+    console.error("Failed to fetch content from URL:", error);
+    throw new Error("The AI could not retrieve content from the provided URL. It might be inaccessible or invalid.");
+  }
 };

@@ -1,33 +1,112 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { InputForm } from './components/InputForm';
 import { ReviewPanel } from './components/ReviewPanel';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { BrandKitManager } from './components/BrandKitManager';
 import { generateTextAndImagePrompt, generateImage } from './services/geminiService';
-import type { GeneratedTextContent } from './types';
+import type { GeneratedTextContent, BrandKit, BackgroundChoice, LogoPosition, DesignTemplate, FontStyle, SocialHandle, SocialPlatform, AppStep } from './types';
+import { getTemplateDefaults } from './types';
 import { SparklesIcon } from './components/icons';
 
-type AppStep = 'input' | 'loading' | 'review' | 'error';
-export type BackgroundChoice = { type: 'ai' } | { type: 'upload', file: File } | { type: 'library', url: string };
-export type LogoPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
 
 const isRtl = (text: string) => {
     const rtlRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
     return rtlRegex.test(text);
 };
 
+interface ReviewState {
+    brandColor: string;
+    font: FontStyle;
+    template: DesignTemplate;
+    socialHandles: SocialHandle[];
+}
+
+// ... (other imports)
+
+const quoteIconPath = 'M8.2,4.6C9.3,4.1,10.2,3.4,11,2.5c-1.2,1.1-2.5,2.1-3.9,2.9C6,5.9,5,6.3,3.9,6.6V12h6.8V4.6z M18.2,4.6C19.3,4.1,20.2,3.4,21,2.5c-1.2,1.1-2.5,2.1-3.9,2.9C16,5.9,15,6.3,13.9,6.6V12h6.8V4.6z';
+
+
 const App: React.FC = () => {
   const [step, setStep] = useState<AppStep>('input');
-  const [generatedContent, setGeneratedContent] = useState<GeneratedTextContent | null>(null);
-  const [initialFinalImage, setInitialFinalImage] = useState<string | null>(null);
+  const [textData, setTextData] = useState<GeneratedTextContent | null>(null);
+  const [reviewData, setReviewData] = useState<{
+      content: GeneratedTextContent,
+      finalImage: string,
+      baseImageSrc: string,
+      logoFile: File | null,
+      backgroundType: BackgroundChoice['type']
+  } | null>(null);
+
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [originalContent, setOriginalContent] = useState<string>('');
-  const [baseImageSrc, setBaseImageSrc] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [backgroundType, setBackgroundType] = useState<BackgroundChoice['type'] | null>(null);
+  const [socialHandles, setSocialHandles] = useState<SocialHandle[]>([]);
+  
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
+  const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
+  const [isBrandKitManagerOpen, setIsBrandKitManagerOpen] = useState(false);
+  const [initialReviewState, setInitialReviewState] = useState<ReviewState | null>(null);
+  const [selectedKitName, setSelectedKitName] = useState<string>('');
+  
+  useEffect(() => {
+    try {
+      const savedKits = localStorage.getItem('brandKits');
+      if (savedKits) {
+        setBrandKits(JSON.parse(savedKits));
+      }
+    } catch (error) {
+      console.error("Could not load brand kits from localStorage", error);
+    }
+  }, []);
 
-  const combineImages = useCallback(async (baseImageSrc: string, logoFile: File, headline: string, logoPosition: LogoPosition, fontFamily: string): Promise<string> => {
+  useEffect(() => {
+    try {
+      localStorage.setItem('brandKits', JSON.stringify(brandKits));
+    } catch (error) {
+      console.error("Could not save brand kits to localStorage", error);
+    }
+  }, [brandKits]);
+
+  const handleSaveBrandKit = async (kitData: { name: string; logoFile: File; brandColor: string; font: FontStyle; template: DesignTemplate; socialHandles: SocialHandle[]; }) => {
+    const logoBase64 = await fileToBase64(kitData.logoFile);
+    const newKit: BrandKit = {
+        name: kitData.name,
+        logo: logoBase64,
+        brandColor: kitData.brandColor,
+        font: kitData.font,
+        template: kitData.template,
+        socialHandles: kitData.socialHandles,
+    };
+    setBrandKits(prevKits => {
+        const existingKitIndex = prevKits.findIndex(k => k.name === newKit.name);
+        if (existingKitIndex > -1) {
+            const updatedKits = [...prevKits];
+            updatedKits[existingKitIndex] = newKit;
+            return updatedKits;
+        }
+        return [...prevKits, newKit];
+    });
+  };
+  
+  const handleDeleteBrandKit = (kitName: string) => {
+    setBrandKits(prevKits => prevKits.filter(k => k.name !== kitName));
+  };
+
+  const handleSelectBrandKit = (kit: BrandKit) => {
+    setSelectedKitName(kit.name);
+    setIsBrandKitManagerOpen(false);
+  };
+
+
+  const combineImages = useCallback(async (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[]): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -35,169 +114,609 @@ const App: React.FC = () => {
 
       const baseImage = new Image();
       baseImage.crossOrigin = 'anonymous';
-      baseImage.onload = () => {
+      
+      const performDrawing = (logoImage: HTMLImageElement | null) => {
         const targetWidth = 1080;
         const targetHeight = 1080;
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-        ctx.drawImage(baseImage, 0, 0, targetWidth, targetHeight);
+        
+        const padding = canvas.width * 0.05;
 
-        // Add a dark gradient overlay at the bottom for text readability
-        const gradientHeight = canvas.height * 0.5;
-        const gradient = ctx.createLinearGradient(0, canvas.height - gradientHeight, 0, canvas.height);
-        gradient.addColorStop(0, 'rgba(0,0,0,0)');
-        gradient.addColorStop(0.2, 'rgba(0,0,0,0.4)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0.85)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, canvas.height - gradientHeight, canvas.width, gradientHeight);
+        const drawHeadline = (text: string, boxX: number, boxY: number, boxWidth: number, boxHeight: number, vAlign: 'top' | 'center' | 'bottom' = 'bottom', hAlign: 'left' | 'center' = 'left') => {
+            const baseFontSize = Math.max(24, Math.round(canvas.width / 22));
+            let fontSize = baseFontSize * fontSizeMultiplier;
 
-        const logoImage = new Image();
-        logoImage.onload = () => {
-          const padding = canvas.width * 0.05;
+            let lines: string[];
+            let lineHeight: number;
+            let textBlockHeight: number;
 
-          // --- Draw Headline Text ---
-          const fontSize = Math.max(24, Math.round(canvas.width / 22));
-          ctx.font = `700 ${fontSize}px ${fontFamily}`;
-          ctx.fillStyle = 'white';
-          
-          const textIsRtl = isRtl(headline);
-          ctx.direction = textIsRtl ? 'rtl' : 'ltr';
-          ctx.textAlign = textIsRtl ? 'right' : 'left';
-          
-          ctx.textBaseline = 'bottom';
+            // This loop makes the font size "responsive" to the container height.
+            // It reduces the font size until the text block fits within the boxHeight.
+            do {
+                ctx.font = `700 ${fontSize}px ${fontFamily}`;
+                
+                const words = text.toUpperCase().split(' ');
+                let line = '';
+                lines = []; // Reset lines for recalculation
+                lineHeight = fontSize * 1.15;
 
-          const textToDraw = headline.toUpperCase();
-          const words = textToDraw.split(' ');
-          let line = '';
-          const lines = [];
-          const maxWidth = canvas.width - (padding * 2);
-          const lineHeight = fontSize * 1.15;
+                for (const word of words) {
+                    const testLine = line + word + ' ';
+                    if (ctx.measureText(testLine).width > boxWidth && line.length > 0) {
+                        lines.push(line.trim());
+                        line = word + ' ';
+                    } else {
+                        line = testLine;
+                    }
+                }
+                lines.push(line.trim());
+                
+                textBlockHeight = (lines.length) * lineHeight - (lineHeight - fontSize * 1.05);
 
-          for (const word of words) {
-            const testLine = line + word + ' ';
-            if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
-              lines.push(line.trim());
-              line = word + ' ';
-            } else {
-              line = testLine;
+                if (textBlockHeight > boxHeight) {
+                    fontSize -= 2; // Reduce font size and try again
+                }
+
+            } while (textBlockHeight > boxHeight && fontSize > 18); // Don't let font get too small
+            
+            let startY;
+            
+            if (vAlign === 'bottom') {
+                startY = boxY + boxHeight - ((lines.length -1) * lineHeight) - (lineHeight - fontSize);
+            } else if (vAlign === 'center') {
+                startY = boxY + (boxHeight - textBlockHeight) / 2 + fontSize * 0.9;
+            } else { // top
+                startY = boxY + fontSize;
             }
-          }
-          lines.push(line.trim());
-          
-          const textBlockHeight = (lines.length -1) * lineHeight;
-          const startY = canvas.height - padding - textBlockHeight;
-          const startX = textIsRtl ? canvas.width - padding : padding;
+            
+            const textIsRtl = isRtl(text);
+            ctx.direction = textIsRtl ? 'rtl' : 'ltr';
+            
+            if (hAlign === 'center') {
+              ctx.textAlign = 'center';
+            } else {
+              ctx.textAlign = textIsRtl ? 'right' : 'left';
+            }
 
-          lines.forEach((l, i) => {
-            ctx.fillText(l, startX, startY + (i * lineHeight));
-          });
-          
-          // --- Draw Logo ---
-          const logoWidth = canvas.width * 0.20;
-          const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
-          let logoX: number;
-          let logoY: number;
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = textColor;
+            
+            ctx.save();
+            if (textShadow) {
+              ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+              ctx.shadowBlur = 8;
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 4;
+            }
 
-          switch (logoPosition) {
-            case 'top-left':
-              logoX = padding;
-              logoY = padding;
-              break;
-            case 'top-right':
-              logoX = canvas.width - logoWidth - padding;
-              logoY = padding;
-              break;
-            case 'center':
-              logoX = (canvas.width - logoWidth) / 2;
-              logoY = (canvas.height - logoHeight) / 2;
-              break;
-            case 'bottom-left':
-              logoX = padding;
-              logoY = canvas.height - logoHeight - padding;
-              break;
-            case 'bottom-right':
-            default:
-              logoX = canvas.width - logoWidth - padding;
-              logoY = canvas.height - logoHeight - padding;
-              break;
-          }
-
-          ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
-          
-          resolve(canvas.toDataURL('image/png'));
+            lines.forEach((l, i) => {
+                let startX;
+                if (hAlign === 'center') {
+                  startX = boxX + boxWidth / 2;
+                } else {
+                  startX = textIsRtl ? boxX + boxWidth : boxX;
+                }
+                ctx.fillText(l, startX, startY + (i * lineHeight));
+            });
+            
+            ctx.restore();
         };
-        logoImage.onerror = (err) => reject(new Error('Failed to load logo image: ' + err));
-        logoImage.src = URL.createObjectURL(logoFile);
+
+        const drawLogo = (pos: LogoPosition, bounds = {x: 0, y: 0, width: canvas.width, height: canvas.height}) => {
+           if (!logoImage) return;
+           const logoWidth = canvas.width * 0.20;
+           const logoHeight = (logoImage.height / logoImage.width) * logoWidth;
+           let logoX: number, logoY: number;
+
+           switch (pos) {
+               case 'top-left':
+                   logoX = bounds.x + padding;
+                   logoY = bounds.y + padding;
+                   break;
+               case 'top-right':
+                   logoX = bounds.x + bounds.width - logoWidth - padding;
+                   logoY = bounds.y + padding;
+                   break;
+               case 'center':
+                   logoX = bounds.x + (bounds.width - logoWidth) / 2;
+                   logoY = bounds.y + (bounds.height - logoHeight) / 2;
+                   break;
+               case 'bottom-left':
+                   logoX = bounds.x + padding;
+                   logoY = bounds.y + bounds.height - logoHeight - padding;
+                   break;
+               case 'bottom-right':
+               default:
+                   logoX = bounds.x + bounds.width - logoWidth - padding;
+                   logoY = bounds.y + bounds.height - logoHeight - padding;
+                   break;
+           }
+           ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+        };
+
+        const socialIconData: Record<SocialPlatform, { path: string; viewBox: number }> = {
+            facebook: { path: 'M22.675 0h-21.35c-0.732 0-1.325 0.593-1.325 1.325v21.351c0 0.731 0.593 1.324 1.325 1.324h11.494v-9.294h-3.128v-3.622h3.128v-2.671c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463 0.099 2.795 0.143v3.24l-1.918 0.001c-1.504 0-1.795 0.715-1.795 1.763v2.313h3.587l-0.467 3.622h-3.12v9.293h6.081c0.73 0 1.325-0.593 1.325-1.325v-21.35c0-0.732-0.593-1.325-1.325-1.325z', viewBox: 24 },
+            instagram: { path: 'M12 2.163c3.204 0 3.584 0.012 4.85 0.07 3.252 0.148 4.771 1.691 4.919 4.919 0.058 1.265 0.07 1.646 0.07 4.85s-0.012 3.584-0.07 4.85c-0.148 3.227-1.669 4.771-4.919 4.919-1.266 0.058-1.646 0.07-4.85 0.07s-3.584-0.012-4.85-0.07c-3.252-0.148-4.771-1.691-4.919-4.919-0.058-1.265-0.07-1.646-0.07-4.85s0.012-3.584 0.07-4.85c0.148-3.227 1.669 4.771 4.919-4.919 1.266-0.058 1.646-0.07 4.85-0.07zm0-2.163c-3.264 0-3.664 0.012-4.943 0.07-4.322 0.198-6.131 2.008-6.329 6.329-0.058 1.279-0.07 1.679-0.07 4.943s0.012 3.664 0.07 4.943c0.198 4.322 2.008 6.131 6.329 6.329 1.279 0.058 1.679 0.07 4.943 0.07s3.664-0.012 4.943-0.07c4.322-0.198 6.131-2.008 6.329-6.329 0.058 1.279 0.07-1.679 0.07-4.943s-0.012-3.664-0.07-4.943c-0.198-4.322-2.008-6.131-6.329-6.329-1.279-0.058-1.679-0.07-4.943-0.07zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.162 6.162 6.162 6.162-2.759 6.162-6.162-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.791-4-4s1.791-4 4-4 4 1.791 4 4-1.791 4-4 4zm4.802-11.884c-0.796 0-1.441 0.645-1.441 1.441s0.645 1.441 1.441 1.441 1.441-0.645 1.441-1.441-0.645-1.441-1.441-1.441z', viewBox: 24 },
+            x: { path: 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 7.184L18.901 1.153zm-1.61 19.713h2.54l-14.976-17.14H4.38l12.911 17.14z', viewBox: 24 },
+            linkedin: { path: 'M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z', viewBox: 24 },
+            website: { path: 'M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM12.866 2.05C15.0123 2.50233 16.9038 3.79155 18.228 5.59602C19.5521 7.40049 20.218 9.64531 20.0945 11.9114C19.9711 14.1775 19.0689 16.3114 17.5587 17.9157C16.0485 19.5199 13.045 20.5 10.134 20.05C7.22298 19.6 5.13398 17.8005 3.77202 15.404C2.41006 12.9995 1.90553 10.1547 2.40902 7.40049C2.91251 4.64627 4.54053 2.50233 7.13402 2.05C8.86602 1.8 11.134 1.8 12.866 2.05ZM13 12C13 15.3137 10.3137 18 7 18C7 16.5168 7.37622 15.0934 8.05202 13.8458C8.72782 12.5982 9.67056 11.5714 10.7574 10.866C11.8442 10.1606 13 9.31371 13 8C13 6.68629 11.8442 5.8394 10.7574 5.13398C9.67056 4.42857 8.72782 3.40181 8.05202 2.15418C7.37622 0.906553 7 0 7 0C10.3137 0 13 2.68629 13 6V12Z', viewBox: 24 }
+        };
+
+        const drawSocialHandles = (ctx: CanvasRenderingContext2D, handles: SocialHandle[], y: number, area: {x: number, width: number} = {x: 0, width: ctx.canvas.width}) => {
+            if (!handles || handles.length === 0) return;
+
+            const iconSize = 24;
+            const textFontSize = 20;
+            const iconTextPadding = 10;
+            const handlePadding = 30;
+
+            ctx.font = `500 ${textFontSize}px ${fontFamily}`;
+            ctx.fillStyle = 'white';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left';
+
+            const measurements = handles.map(handle => {
+                if (!handle.username.trim()) return 0;
+                const textWidth = ctx.measureText(handle.username).width;
+                return iconSize + iconTextPadding + textWidth;
+            });
+
+            const validHandles = handles.filter(h => h.username.trim());
+            if (validHandles.length === 0) return;
+
+            const totalWidth = measurements.reduce((sum, width) => sum + width, 0) + (handlePadding * (validHandles.length - 1));
+            let currentX = area.x + (area.width - totalWidth) / 2;
+
+            for (let i = 0; i < handles.length; i++) {
+                const handle = handles[i];
+                const icon = socialIconData[handle.platform];
+                if (!icon || !handle.username.trim()) continue;
+
+                // Draw icon
+                const path = new Path2D(icon.path);
+                const scale = iconSize / icon.viewBox;
+                ctx.save();
+                ctx.translate(currentX, y);
+                ctx.scale(scale, scale);
+                ctx.translate(0, -icon.viewBox / 2); // vertically center icon
+                ctx.fill(path);
+                ctx.restore();
+
+                currentX += iconSize + iconTextPadding;
+
+                // Draw text
+                ctx.fillText(handle.username, currentX, y);
+
+                currentX += measurements[i] - iconSize - iconTextPadding + handlePadding;
+            }
+        };
+
+        // --- Template specific rendering ---
+        switch (template) {
+          case 'top-bar': {
+            ctx.fillStyle = '#111827'; // bg color
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+
+            // Draw Top Bar
+            ctx.fillStyle = brandColor;
+            const topBarHeight = canvas.height * 0.15;
+            ctx.fillRect(0, 0, canvas.width, topBarHeight);
+            
+            if (logoImage) {
+              // Draw Logo in Top Bar
+              const logoWidth = topBarHeight * 0.6 * (logoImage.width / logoImage.height);
+              const logoHeight = topBarHeight * 0.6;
+              ctx.drawImage(logoImage, padding, (topBarHeight - logoHeight) / 2, logoWidth, logoHeight);
+            }
+
+            // Draw Image
+            const imgDestY = topBarHeight;
+            const imgDestHeight = canvas.height * 0.55;
+            const sourceAspectRatio = baseImage.width / baseImage.height;
+            const destAspectRatio = canvas.width / imgDestHeight;
+            let sx, sy, sWidth, sHeight;
+            if (sourceAspectRatio > destAspectRatio) {
+                sHeight = baseImage.height;
+                sWidth = sHeight * destAspectRatio;
+                sx = (baseImage.width - sWidth) / 2;
+                sy = 0;
+            } else {
+                sWidth = baseImage.width;
+                sHeight = sWidth / destAspectRatio;
+                sx = 0;
+                sy = (baseImage.height - sHeight) / 2;
+            }
+            ctx.drawImage(baseImage, sx, sy, sWidth, sHeight, 0, imgDestY, canvas.width, imgDestHeight);
+            
+            // Draw Bottom Bar
+            const bottomBarY = topBarHeight + imgDestHeight;
+            const bottomBarHeight = canvas.height - bottomBarY;
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(0, bottomBarY, canvas.width, bottomBarHeight);
+
+            // Draw Headline in Bottom Bar
+            drawHeadline(headline, padding, bottomBarY + padding/2, canvas.width - padding*2, bottomBarHeight - padding, 'center');
+            break;
+          }
+          case 'quote-focus': {
+            // Draw blurred background
+            ctx.filter = 'blur(10px)';
+            ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+            ctx.filter = 'none';
+
+            // Dark overlay
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw large quote icon
+            const quotePath = new Path2D(quoteIconPath);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            const quoteSize = 300;
+            const scale = quoteSize / 24; // 24 is the viewbox size of the path
+            ctx.save();
+            ctx.translate((canvas.width - quoteSize)/2, (canvas.height - quoteSize)/2 - 50);
+            ctx.scale(scale, scale);
+            ctx.fill(quotePath);
+            ctx.restore();
+
+            // Draw headline
+            drawHeadline(headline, padding, padding, canvas.width - padding*2, canvas.height - padding*2, 'center', 'center');
+            
+            // Draw social icons
+            const socialBarHeight = 80;
+            drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2));
+            break;
+          }
+          case 'news-banner': {
+            ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+
+            const bannerHeight = canvas.height * 0.22;
+            const bannerY = canvas.height - bannerHeight;
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
+
+            if (logoImage) {
+                // Draw logo on the left of banner
+                const logoHeight = bannerHeight * 0.4;
+                const logoWidth = logoHeight * (logoImage.width / logoImage.height);
+                const logoX = padding;
+                const logoY = bannerY + (bannerHeight - logoHeight) / 2;
+                ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+                
+                // Draw vertical divider
+                const dividerX = logoX + logoWidth + padding;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fillRect(dividerX, bannerY + padding, 3, bannerHeight - padding*2);
+                
+                // Draw headline
+                const textX = dividerX + padding;
+                const textWidth = canvas.width - textX - padding;
+                drawHeadline(headline, textX, bannerY, textWidth, bannerHeight, 'center');
+            } else {
+                // No logo, headline takes full width
+                drawHeadline(headline, padding, bannerY, canvas.width - padding*2, bannerHeight, 'center');
+            }
+            break;
+          }
+          case 'heavy-bottom': {
+            ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+            drawLogo(logoPosition);
+
+            const socialBarHeight = 80;
+            const barHeight = canvas.height * 0.45;
+            const textBarHeight = barHeight - socialBarHeight;
+            const textBarY = canvas.height - barHeight;
+
+            // Draw semi-transparent text bar
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(0, textBarY, canvas.width, textBarHeight);
+            drawHeadline(headline, padding, textBarY + padding, canvas.width - padding*2, textBarHeight - padding, 'center');
+
+            // Draw solid social icon bar
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, canvas.height - socialBarHeight, canvas.width, socialBarHeight);
+            drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2));
+            break;
+          }
+          
+          case 'split-vertical': {
+            const splitPoint = canvas.width / 2;
+            
+            // Draw Image on the left
+            const sourceAspectRatio = baseImage.width / baseImage.height;
+            const destAspectRatio = splitPoint / canvas.height;
+            let sx, sy, sWidth, sHeight;
+
+            if (sourceAspectRatio > destAspectRatio) {
+                sHeight = baseImage.height;
+                sWidth = sHeight * destAspectRatio;
+                sx = (baseImage.width - sWidth) / 2;
+                sy = 0;
+            } else {
+                sWidth = baseImage.width;
+                sHeight = sWidth / destAspectRatio;
+                sx = 0;
+                sy = (baseImage.height - sHeight) / 2;
+            }
+            ctx.drawImage(baseImage, sx, sy, sWidth, sHeight, 0, 0, splitPoint, canvas.height);
+
+            // Draw color background on the right
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(splitPoint, 0, splitPoint, canvas.height);
+            
+            const rightPadding = padding * 1.5;
+            let textY = padding * 2;
+
+            if (logoImage) {
+                // Draw logo top-center on the right panel
+                const logoMaxWidth = splitPoint - rightPadding * 2;
+                const logoAspectRatio = logoImage.width / logoImage.height;
+                let logoWidth = Math.min(logoImage.width, logoMaxWidth);
+                let logoHeight = logoWidth / logoAspectRatio;
+
+                if (logoHeight > canvas.height * 0.2) {
+                    logoHeight = canvas.height * 0.2;
+                    logoWidth = logoHeight * logoAspectRatio;
+                }
+
+                const logoX = splitPoint + (splitPoint - logoWidth) / 2;
+                const logoY = padding * 2;
+                ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+                textY = logoY + logoHeight + padding;
+            }
+
+            // Draw headline
+            const socialBarHeight = 80;
+            const textHeight = canvas.height - textY - socialBarHeight - padding;
+            drawHeadline(headline, splitPoint + rightPadding, textY, splitPoint - rightPadding * 2, textHeight, 'center');
+            
+            // Draw social icons at the bottom right
+            drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2), { x: splitPoint, width: splitPoint });
+            
+            break;
+          }
+
+          case 'minimal': {
+            ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+            
+            const socialBarHeight = 60;
+            const textOverlayHeight = canvas.height * 0.3;
+            const textOverlayY = canvas.height - textOverlayHeight - socialBarHeight;
+            
+            // Draw semi-transparent text bar
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(0, textOverlayY, canvas.width, textOverlayHeight);
+            
+            // Draw headline
+            drawHeadline(headline, padding, textOverlayY + padding, canvas.width - padding*2, textOverlayHeight - padding*2, 'center');
+            
+            // Draw solid brand color social icon bar
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(0, canvas.height - socialBarHeight, canvas.width, socialBarHeight);
+            drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2));
+            
+            // Draw logo, but make sure it is not inside the text/social area
+            drawLogo(logoPosition, {x: 0, y: 0, width: canvas.width, height: textOverlayY });
+
+            break;
+          }
+
+          case 'framed': {
+            const borderSize = canvas.width * 0.08;
+            
+            // Draw outer border
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw inner image
+            const innerX = borderSize;
+            const innerY = borderSize;
+            const innerWidth = canvas.width - borderSize * 2;
+            const innerHeight = canvas.height - borderSize * 2;
+
+            const sourceAspectRatio = baseImage.width / baseImage.height;
+            const destAspectRatio = innerWidth / innerHeight;
+            let sx, sy, sWidth, sHeight;
+            if (sourceAspectRatio > destAspectRatio) {
+                sHeight = baseImage.height;
+                sWidth = sHeight * destAspectRatio;
+                sx = (baseImage.width - sWidth) / 2;
+                sy = 0;
+            } else {
+                sWidth = baseImage.width;
+                sHeight = sWidth / destAspectRatio;
+                sx = 0;
+                sy = (baseImage.height - sHeight) / 2;
+            }
+            ctx.drawImage(baseImage, sx, sy, sWidth, sHeight, innerX, innerY, innerWidth, innerHeight);
+            
+            if (logoImage) {
+                // Draw logo in top border, centered
+                const logoMaxHeight = borderSize * 0.6;
+                const logoAspectRatio = logoImage.width / logoImage.height;
+                let logoHeight = Math.min(logoImage.height, logoMaxHeight);
+                let logoWidth = logoHeight * logoAspectRatio;
+                const logoX = (canvas.width - logoWidth) / 2;
+                const logoY = (borderSize - logoHeight) / 2;
+                ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+            }
+
+            // Draw headline in bottom border
+            const textY = canvas.height - borderSize;
+            const textHeight = borderSize;
+            const socialBarHeight = 30; // space for icons
+            drawHeadline(headline, padding*2, textY, canvas.width - padding * 4, textHeight - padding / 2 - socialBarHeight, 'top', 'center');
+            
+            // Draw social icons in bottom border, below text
+            drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight/2) - 5);
+            break;
+          }
+
+          case 'classic':
+          default: {
+            const socialBarHeight = 80;
+            ctx.drawImage(baseImage, 0, 0, targetWidth, targetHeight);
+            
+            const gradientHeight = canvas.height * 0.5;
+            const gradient = ctx.createLinearGradient(0, canvas.height - gradientHeight, 0, canvas.height - socialBarHeight);
+            gradient.addColorStop(0, 'rgba(0,0,0,0)');
+            gradient.addColorStop(0.2, 'rgba(0,0,0,0.4)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0.85)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, canvas.height - gradientHeight, canvas.width, gradientHeight - socialBarHeight);
+            
+            drawHeadline(headline, padding, canvas.height - gradientHeight, canvas.width - padding * 2, gradientHeight - padding - socialBarHeight);
+            drawLogo(logoPosition, {x: 0, y: 0, width: canvas.width, height: canvas.height - socialBarHeight });
+
+            // Draw solid social icon bar
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, canvas.height - socialBarHeight, canvas.width, socialBarHeight);
+            drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2));
+            break;
+          }
+        }
+        
+        resolve(canvas.toDataURL('image/png'));
+      };
+
+      baseImage.onload = () => {
+        if (logoFile) {
+          const logoImage = new Image();
+          logoImage.onload = () => performDrawing(logoImage);
+          logoImage.onerror = (err) => reject(new Error('Failed to load logo image: ' + err));
+          logoImage.src = URL.createObjectURL(logoFile);
+        } else {
+          performDrawing(null);
+        }
       };
       baseImage.onerror = (err) => reject(new Error('Failed to load generated image: ' + err));
       baseImage.src = baseImageSrc;
     });
   }, []);
 
-  const handleGenerate = async (
+  const handleGenerateText = async (
     content: string, 
-    logo: File, 
     tone: string, 
     audience: string,
-    background: BackgroundChoice,
-    imageStyle: string
+    imageStyle: string,
   ) => {
-    setStep('loading');
+    setStep('text-loading');
     setErrorMessage('');
     setOriginalContent(content);
+    try {
+      const generatedText = await generateTextAndImagePrompt(content, tone, audience, imageStyle);
+      setTextData(generatedText);
+      setStep('text-generated');
+    } catch (error) {
+      handleError(error, "Failed to generate text content.");
+    }
+  };
+
+  const handleGenerateImageAndReview = async (
+    logo: File | null, 
+    background: BackgroundChoice,
+    socialHandles: SocialHandle[],
+    template: DesignTemplate,
+    brandColor: string,
+    font: FontStyle
+  ) => {
+    if (!textData) {
+        handleError(new Error("Text data is missing"), "Cannot generate image without text data.");
+        return;
+    }
+    setStep('image-loading');
+    setErrorMessage('');
     setLogoFile(logo);
-    setBackgroundType(background.type);
+    setSocialHandles(socialHandles);
+
+    const reviewState: ReviewState = {
+        brandColor: brandColor,
+        font: font,
+        template: template,
+        socialHandles: socialHandles,
+    };
+    setInitialReviewState(reviewState);
 
     try {
-      const textData = await generateTextAndImagePrompt(content, tone, audience, imageStyle);
-      
-      let generatedBaseImageSrc = '';
+      let baseImageSrc = '';
 
       if (background.type === 'ai') {
         try {
-            const generatedImgBase64 = await generateImage(textData.imagePrompt);
-            generatedBaseImageSrc = `data:image/png;base64,${generatedImgBase64}`;
+            const generatedImgBase64 = await generateImage(background.prompt);
+            baseImageSrc = `data:image/png;base64,${generatedImgBase64}`;
         } catch (e) {
             console.warn("Initial image generation failed, trying a fallback prompt.", e);
             const fallbackPrompt = `A professional, abstract background for a news story. Style: photorealistic, subtle, dark tones.`;
             try {
                 const fallbackImgBase64 = await generateImage(fallbackPrompt);
-                generatedBaseImageSrc = `data:image/png;base64,${fallbackImgBase64}`;
+                baseImageSrc = `data:image/png;base64,${fallbackImgBase64}`;
             } catch (fallbackError) {
                 console.error("Fallback image generation also failed.", fallbackError);
                 throw e;
             }
         }
       } else if (background.type === 'upload') {
-        generatedBaseImageSrc = URL.createObjectURL(background.file);
+        baseImageSrc = URL.createObjectURL(background.file);
       } else if (background.type === 'library') {
-        generatedBaseImageSrc = background.url;
+        baseImageSrc = background.url;
       }
       
-      setBaseImageSrc(generatedBaseImageSrc);
-      const compositeImage = await combineImages(generatedBaseImageSrc, logo, textData.headline1, 'bottom-right', "'Noto Sans', sans-serif");
+      const { logoPosition, fontSizeMultiplier, textColor, textShadow } = getTemplateDefaults(template);
+      
+      const fontFamilies: Record<FontStyle, string> = {
+          'sans-serif': "'Noto Sans', sans-serif",
+          'serif': "'Noto Serif', serif",
+          'monospace': "'Noto Sans Mono', monospace",
+          'jameel-noori': "'Jameel Noori Nastaleeq', cursive",
+          'mb-sindhi': "'MB Sindhi', sans-serif",
+      };
 
-      setGeneratedContent(textData);
-      setInitialFinalImage(compositeImage);
+      const compositeImage = await combineImages(
+        baseImageSrc, 
+        logo, 
+        textData.headline1, 
+        logoPosition,
+        fontFamilies[font],
+        template,
+        brandColor, 
+        fontSizeMultiplier,
+        textColor,
+        textShadow,
+        socialHandles
+      );
+
+      setReviewData({
+        content: textData,
+        finalImage: compositeImage,
+        baseImageSrc,
+        logoFile: logo,
+        backgroundType: background.type,
+      });
+
       setStep('review');
     } catch (error) {
+        handleError(error, "Failed to generate post image.");
+    }
+  };
+  
+  const handleError = (error: unknown, contextMessage: string) => {
       console.error(error);
       let message = error instanceof Error ? error.message : 'An unknown error occurred.';
       if (message.includes("Image generation failed")) {
           message = "The AI couldn't create an image for this content, possibly due to safety filters. Please try modifying your input text or generating again."
       }
-      setErrorMessage(`Failed to generate post. ${message}`);
+      setErrorMessage(`${contextMessage} ${message}`);
       setStep('error');
-    }
   };
 
-  const handleRegenerateImage = useCallback(async () => {
-    if (!generatedContent?.imagePrompt) return;
+  const handleRegenerateImage = useCallback(async (prompt: string) => {
+    if (!reviewData) return;
     setIsRegeneratingImage(true);
     try {
       let newBaseImageSrc = '';
       try {
-        const generatedImgBase64 = await generateImage(generatedContent.imagePrompt);
+        const generatedImgBase64 = await generateImage(prompt);
         newBaseImageSrc = `data:image/png;base64,${generatedImgBase64}`;
       } catch (e) {
         console.warn("Image regeneration failed, trying a fallback prompt.", e);
@@ -205,49 +724,67 @@ const App: React.FC = () => {
         const fallbackImgBase64 = await generateImage(fallbackPrompt);
         newBaseImageSrc = `data:image/png;base64,${fallbackImgBase64}`;
       }
-      setBaseImageSrc(newBaseImageSrc);
+      setReviewData(prev => prev ? { ...prev, baseImageSrc: newBaseImageSrc, content: {...prev.content, imagePrompt: prompt} } : null);
     } catch (error) {
       console.error("Failed to regenerate image even with fallback", error);
-      // Optionally, set an error state to be displayed on the review panel
     } finally {
       setIsRegeneratingImage(false);
     }
-  }, [generatedContent]);
+  }, [reviewData]);
 
   const handleStartOver = () => {
     setStep('input');
-    setGeneratedContent(null);
-    setInitialFinalImage(null);
+    setTextData(null);
+    setReviewData(null);
     setErrorMessage('');
     setOriginalContent('');
-    setBaseImageSrc(null);
     setLogoFile(null);
-    setBackgroundType(null);
+    setSocialHandles([]);
+    setInitialReviewState(null);
+    setSelectedKitName('');
   };
 
   const renderContent = () => {
     switch (step) {
       case 'input':
-        return <InputForm onGenerate={handleGenerate} />;
-      case 'loading':
-        return <LoadingSpinner />;
+      case 'text-generated':
+        return <InputForm 
+                    onGenerateText={handleGenerateText} 
+                    onGenerateImageAndReview={handleGenerateImageAndReview}
+                    brandKits={brandKits} 
+                    onOpenBrandKitManager={() => setIsBrandKitManagerOpen(true)}
+                    selectedKitName={selectedKitName}
+                    onSelectKitName={setSelectedKitName}
+                    step={step}
+                    textResult={textData}
+                />;
+      case 'text-loading':
+        return <LoadingSpinner stage="text" />;
+      case 'image-loading':
+        return <LoadingSpinner stage="image" />;
       case 'review':
-        if (generatedContent && initialFinalImage && baseImageSrc && logoFile && backgroundType) {
+        if (reviewData && initialReviewState) {
           return <ReviewPanel 
-                    content={generatedContent} 
-                    initialFinalImage={initialFinalImage}
-                    baseImageSrc={baseImageSrc}
-                    logoFile={logoFile}
+                    key={reviewData.baseImageSrc} // Force re-mount on image change
+                    content={reviewData.content} 
+                    initialFinalImage={reviewData.finalImage}
+                    baseImageSrc={reviewData.baseImageSrc}
+                    logoFile={reviewData.logoFile}
                     combineImages={combineImages}
                     onStartOver={handleStartOver} 
                     originalContent={originalContent}
-                    backgroundType={backgroundType}
+                    backgroundType={reviewData.backgroundType}
                     onRegenerateImage={handleRegenerateImage}
                     isRegeneratingImage={isRegeneratingImage}
+                    onSaveBrandKit={handleSaveBrandKit}
+                    initialBrandColor={initialReviewState.brandColor}
+                    initialFont={initialReviewState.font}
+                    initialTemplate={initialReviewState.template}
+                    initialSocialHandles={initialReviewState.socialHandles}
+                    brandKits={brandKits}
                 />;
         }
-        setErrorMessage('Generated content is missing. Please try again.');
-        setStep('error');
+        handleError(new Error("Review data is missing"), "Could not prepare review panel.");
         return null;
       case 'error':
         return (
@@ -279,6 +816,13 @@ const App: React.FC = () => {
         <main className="w-full max-w-4xl">
             {renderContent()}
         </main>
+        <BrandKitManager
+            isOpen={isBrandKitManagerOpen}
+            onClose={() => setIsBrandKitManagerOpen(false)}
+            kits={brandKits}
+            onDelete={handleDeleteBrandKit}
+            onSelect={handleSelectBrandKit}
+        />
     </div>
   );
 };

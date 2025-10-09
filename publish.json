@@ -1,6 +1,7 @@
 {
   "files": [
     "App.tsx",
+    "components/BrandKitManager.tsx",
     "components/InputForm.tsx",
     "components/LoadingSpinner.tsx",
     "components/ReviewPanel.tsx",
