@@ -1,20 +1,20 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadIcon, MagicWandIcon, LinkIcon, TrashIcon, XIcon, SparklesIcon, ClassicLayoutIcon, TopBarLayoutIcon, HeavyBottomLayoutIcon, SplitVerticalLayoutIcon, MinimalLayoutIcon, FramedLayoutIcon, QuoteFocusLayoutIcon, NewsBannerLayoutIcon } from './icons';
-import type { BackgroundChoice, BrandKit, SocialHandle, SocialPlatform, GeneratedTextContent, AppStep, DesignTemplate, FontStyle } from '../types';
+import { UploadIcon, MagicWandIcon, LinkIcon, TrashIcon, XIcon, SparklesIcon, ChevronDownIcon, ChevronUpIcon, templates } from './icons';
+import type { BackgroundChoice, BrandKit, SocialHandle, SocialPlatform, DesignTemplate, FontStyle } from '../types';
+import { fontDisplayNames, socialPlatforms } from '../types';
 import { getContentFromURL } from '../services/geminiService';
 
 
 type Tone = 'Professional' | 'News' | 'Entertainment' | 'Casual' | 'Witty';
-type ImageStyle = 'Photorealistic' | 'Abstract' | 'Minimalist' | 'Cinematic' | 'Fantasy' | 'Sci-Fi' | 'Vintage' | 'Watercolor' | 'Cyberpunk';
+type ImageStyle = 'Photorealistic' | 'Cinematic' | 'Vintage' | 'Watercolor' | 'Impressionism' | 'Pop-Art' | 'Surrealism' | 'Abstract' | 'Minimalist' | 'Fantasy' | 'Sci-Fi' | 'Cyberpunk' | 'Steampunk' | 'Gothic';
 
 interface InputFormProps {
-  onGenerateText: (
+  onGeneratePost: (
     content: string, 
     tone: Tone, 
     audience: string,
     imageStyle: ImageStyle,
-  ) => void;
-  onGenerateImageAndReview: (
     logo: File | null, 
     background: BackgroundChoice,
     socialHandles: SocialHandle[],
@@ -26,8 +26,6 @@ interface InputFormProps {
   onOpenBrandKitManager: () => void;
   selectedKitName: string;
   onSelectKitName: (name: string) => void;
-  step: AppStep;
-  textResult: GeneratedTextContent | null;
 }
 
 const base64ToFile = (dataUrl: string, filename: string): File => {
@@ -67,46 +65,16 @@ const libraryImages = [
   'https://images.unsplash.com/photo-1505682499293-233fb141754c?q=80&w=1200&auto=format&fit=crop',
 ];
 
-const templates: { name: DesignTemplate, Icon: React.FC<any> }[] = [
-    { name: 'classic', Icon: ClassicLayoutIcon },
-    { name: 'top-bar', Icon: TopBarLayoutIcon },
-    { name: 'heavy-bottom', Icon: HeavyBottomLayoutIcon },
-    { name: 'split-vertical', Icon: SplitVerticalLayoutIcon },
-    { name: 'minimal', Icon: MinimalLayoutIcon },
-    { name: 'framed', Icon: FramedLayoutIcon },
-    { name: 'quote-focus', Icon: QuoteFocusLayoutIcon },
-    { name: 'news-banner', Icon: NewsBannerLayoutIcon },
-];
-
-const fontDisplayNames: Record<FontStyle, string> = {
-    'sans-serif': 'Sans Serif',
-    'serif': 'Serif',
-    'monospace': 'Monospace',
-    'jameel-noori': 'Jameel Noori',
-    'mb-sindhi': 'MB Sindhi',
-};
-
 const FetchSpinner: React.FC = () => (
     <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-white"></div>
 );
 
-const socialPlatforms: { value: SocialPlatform, label: string }[] = [
-    { value: 'x', label: 'X (Twitter)' },
-    { value: 'instagram', label: 'Instagram' },
-    { value: 'facebook', label: 'Facebook' },
-    { value: 'linkedin', label: 'LinkedIn' },
-    { value: 'website', label: 'Website' },
-];
-
 export const InputForm: React.FC<InputFormProps> = ({ 
-    onGenerateText, 
-    onGenerateImageAndReview, 
+    onGeneratePost, 
     brandKits, 
     onOpenBrandKitManager, 
     selectedKitName, 
     onSelectKitName, 
-    step, 
-    textResult 
 }) => {
   const [content, setContent] = useState('');
   const [logo, setLogo] = useState<File | null>(null);
@@ -121,7 +89,6 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [selectedUploadIndex, setSelectedUploadIndex] = useState<number | null>(null);
   const [selectedLibraryImage, setSelectedLibraryImage] = useState<string | null>(null);
   const [imageStyle, setImageStyle] = useState<ImageStyle>('Photorealistic');
-  const [imagePrompt, setImagePrompt] = useState('');
   
   const [url, setUrl] = useState('');
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
@@ -132,12 +99,12 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [font, setFont] = useState<FontStyle>('sans-serif');
   const [template, setTemplate] = useState<DesignTemplate>('classic');
 
+  const [isBrandingOpen, setIsBrandingOpen] = useState(true);
+
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
   
-  const isTextGenerated = step === 'text-generated';
-
   useEffect(() => {
     return () => {
       backgroundImagePreviews.forEach(url => URL.revokeObjectURL(url));
@@ -183,13 +150,6 @@ export const InputForm: React.FC<InputFormProps> = ({
     }
   }, [selectedKitName, brandKits]);
 
-  useEffect(() => {
-    if (textResult && isTextGenerated) {
-        setImagePrompt(textResult.imagePrompt);
-    }
-  }, [textResult, isTextGenerated]);
-
-
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'background') => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -217,11 +177,12 @@ export const InputForm: React.FC<InputFormProps> = ({
         }
 
         if (imageFiles.length > 0) {
+            const currentFileCount = backgroundImageFiles.length;
             const newFiles = [...backgroundImageFiles, ...imageFiles];
             setBackgroundImageFiles(newFiles);
             const newPreviews = imageFiles.map(file => URL.createObjectURL(file));
             setBackgroundImagePreviews(prev => [...prev, ...newPreviews]);
-            if (selectedUploadIndex === null) setSelectedUploadIndex(0);
+            if (selectedUploadIndex === null) setSelectedUploadIndex(currentFileCount);
             setBackgroundSource('upload');
             setError('');
         }
@@ -258,15 +219,32 @@ export const InputForm: React.FC<InputFormProps> = ({
             }
         }
         if (imageFiles.length > 0) {
+            const currentFileCount = backgroundImageFiles.length;
             const newFiles = [...backgroundImageFiles, ...imageFiles];
             setBackgroundImageFiles(newFiles);
             const newPreviews = imageFiles.map(file => URL.createObjectURL(file));
             setBackgroundImagePreviews(prev => [...prev, ...newPreviews]);
-            if (selectedUploadIndex === null) setSelectedUploadIndex(0);
+            if (selectedUploadIndex === null) setSelectedUploadIndex(currentFileCount);
             setBackgroundSource('upload');
             setError('');
         }
       }
+  };
+  
+  const handleRemoveBackgroundImage = (indexToRemove: number) => {
+    URL.revokeObjectURL(backgroundImagePreviews[indexToRemove]);
+
+    const newFiles = backgroundImageFiles.filter((_, index) => index !== indexToRemove);
+    const newPreviews = backgroundImagePreviews.filter((_, index) => index !== indexToRemove);
+    
+    setBackgroundImageFiles(newFiles);
+    setBackgroundImagePreviews(newPreviews);
+
+    if (selectedUploadIndex === indexToRemove) {
+        setSelectedUploadIndex(newFiles.length > 0 ? 0 : null);
+    } else if (selectedUploadIndex && selectedUploadIndex > indexToRemove) {
+        setSelectedUploadIndex(selectedUploadIndex - 1);
+    }
   };
 
   const handleFetchUrl = async () => {
@@ -305,44 +283,47 @@ export const InputForm: React.FC<InputFormProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (step === 'input') {
-        if (!content.trim()) {
-            setError('Please provide some content for the post.');
-            return;
-        }
-        setError('');
-        onGenerateText(content, tone, audience, imageStyle);
-    } else if (step === 'text-generated') {
-        const hasEmptyUsername = socialHandles.some(handle => !handle.username.trim());
-        if (hasEmptyUsername) {
-            setError('Please provide a username for each social handle, or remove the empty ones.');
-            return;
-        }
-        
-        let background: BackgroundChoice;
-        if (backgroundSource === 'ai') {
-            if (!imagePrompt.trim()) {
-                setError('Please provide a prompt for the AI-generated image.');
-                return;
-            }
-            background = { type: 'ai', prompt: imagePrompt };
-        } else if (backgroundSource === 'upload') {
-            if (selectedUploadIndex === null || !backgroundImageFiles[selectedUploadIndex]) {
-                setError('Please upload and select a background image.');
-                return;
-            }
-            background = { type: 'upload', file: backgroundImageFiles[selectedUploadIndex] };
-        } else { // library
-            if (!selectedLibraryImage) {
-                setError('Please select an image from the library.');
-                return;
-            }
-            background = { type: 'library', url: selectedLibraryImage };
-        }
-
-        setError('');
-        onGenerateImageAndReview(logo, background, socialHandles, template, brandColor, font);
+    if (!content.trim()) {
+        setError('Please provide some content for the post.');
+        return;
     }
+
+    const hasEmptyUsername = socialHandles.some(handle => !handle.username.trim());
+    if (hasEmptyUsername) {
+        setError('Please provide a username for each social handle, or remove the empty ones.');
+        return;
+    }
+    
+    let background: BackgroundChoice;
+    if (backgroundSource === 'ai') {
+        background = { type: 'ai', prompt: '' }; // This will be replaced by the generated prompt in App.tsx
+    } else if (backgroundSource === 'upload') {
+        if (selectedUploadIndex === null || !backgroundImageFiles[selectedUploadIndex]) {
+            setError('Please upload and select a background image.');
+            return;
+        }
+        background = { type: 'upload', file: backgroundImageFiles[selectedUploadIndex] };
+    } else { // library
+        if (!selectedLibraryImage) {
+            setError('Please select an image from the library.');
+            return;
+        }
+        background = { type: 'library', url: selectedLibraryImage };
+    }
+
+    setError('');
+    onGeneratePost(
+        content,
+        tone,
+        audience,
+        imageStyle,
+        logo,
+        background,
+        socialHandles,
+        template,
+        brandColor,
+        font
+    );
   };
 
   return (
@@ -376,95 +357,108 @@ export const InputForm: React.FC<InputFormProps> = ({
         </div>
 
         {/* Step 2: Branding & Style */}
-        <fieldset className="bg-gray-900 p-4 rounded-lg border border-gray-600 space-y-4">
-            <legend className="text-sm font-medium text-gray-300 px-2">2. Branding & Style</legend>
-            
-            {/* Logo */}
-            <div>
-                <label className="text-xs font-medium text-gray-400">Brand Logo (Optional)</label>
-                <label 
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, 'logo')}
-                    htmlFor="logo-upload" 
-                    className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-700 border-dashed rounded-md transition-colors cursor-pointer hover:border-indigo-500"
-                >
-                    <div className="space-y-1 text-center">
-                        {logoPreview ? (
-                            <img src={logoPreview} alt="Logo Preview" className="mx-auto h-16 w-auto object-contain" />
-                        ) : (
-                            <UploadIcon className="mx-auto h-10 w-10 text-gray-500" />
-                        )}
-                        <div className="flex text-sm text-gray-400">
-                            <p className="pl-1">{logo ? 'Change logo' : 'Upload or drag and drop'}</p>
-                        </div>
-                        <p className="text-xs text-gray-500">{selectedKitName ? `Using '${selectedKitName}' kit` : 'PNG, JPG, etc.'}</p>
+        <div>
+            <button
+                type="button"
+                onClick={() => setIsBrandingOpen(!isBrandingOpen)}
+                className="w-full flex justify-between items-center text-left text-sm font-medium text-gray-300 mb-2"
+                aria-expanded={isBrandingOpen}
+                aria-controls="branding-fieldset"
+            >
+                2. Branding & Style
+                {isBrandingOpen ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+            </button>
+            {isBrandingOpen && (
+                <fieldset id="branding-fieldset" className="bg-gray-900 p-4 rounded-lg border border-gray-600 space-y-4">
+                    
+                    {/* Logo */}
+                    <div>
+                        <label className="text-xs font-medium text-gray-400">Brand Logo (Optional)</label>
+                        <label 
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, 'logo')}
+                            htmlFor="logo-upload" 
+                            className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-700 border-dashed rounded-md transition-colors cursor-pointer hover:border-indigo-500"
+                        >
+                            <div className="space-y-1 text-center">
+                                {logoPreview ? (
+                                    <img src={logoPreview} alt="Logo Preview" className="mx-auto h-16 w-auto object-contain" />
+                                ) : (
+                                    <UploadIcon className="mx-auto h-10 w-10 text-gray-500" />
+                                )}
+                                <div className="flex text-sm text-gray-400">
+                                    <p className="pl-1">{logo ? 'Change logo' : 'Upload or drag and drop'}</p>
+                                </div>
+                                <p className="text-xs text-gray-500">{selectedKitName ? `Using '${selectedKitName}' kit` : 'PNG, JPG, etc.'}</p>
+                            </div>
+                            <input id="logo-upload" name="logo-upload" type="file" className="sr-only" accept="image/*" onChange={(e) => handleFileChange(e, 'logo')} ref={logoInputRef} />
+                        </label>
                     </div>
-                    <input id="logo-upload" name="logo-upload" type="file" className="sr-only" accept="image/*" onChange={(e) => handleFileChange(e, 'logo')} ref={logoInputRef} />
-                </label>
-            </div>
 
-            {/* Template, Color, Font */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label htmlFor="brand-color" className="text-xs font-medium text-gray-400 block mb-1">Brand Color</label>
-                  <input id="brand-color" type="color" value={brandColor} onChange={(e) => {setBrandColor(e.target.value); onSelectKitName('');}} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-xs font-medium text-gray-400">Font Style</label>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {(Object.keys(fontDisplayNames) as FontStyle[]).map(f => (
-                      <button key={f} type="button" onClick={() => {setFont(f); onSelectKitName('');}} className={`px-3 py-1.5 text-xs font-medium transition-colors rounded-lg ${font === f ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-                        {fontDisplayNames[f]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-400">Template</label>
-              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mt-1">
-                {templates.map(({ name, Icon }) => (
-                  <button key={name} type="button" onClick={() => {setTemplate(name); onSelectKitName('');}} className={`p-2 rounded-lg transition-colors aspect-square flex items-center justify-center ${template === name ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`} title={name}>
-                    <Icon className="w-7 h-7" />
-                  </button>
-                ))}
-              </div>
-            </div>
+                    {/* Template, Color, Font */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label htmlFor="brand-color" className="text-xs font-medium text-gray-400 block mb-1">Brand Color</label>
+                          <input id="brand-color" type="color" value={brandColor} onChange={(e) => {setBrandColor(e.target.value); onSelectKitName('');}} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="text-xs font-medium text-gray-400">Font Style</label>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {(Object.keys(fontDisplayNames) as FontStyle[]).map(f => (
+                              <button key={f} type="button" onClick={() => {setFont(f); onSelectKitName('');}} className={`px-3 py-1.5 text-xs font-medium transition-colors rounded-lg ${font === f ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
+                                {fontDisplayNames[f]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-400">Template</label>
+                      <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mt-1">
+                        {templates.map(({ name, Icon }) => (
+                          <button key={name} type="button" onClick={() => {setTemplate(name); onSelectKitName('');}} className={`p-2 rounded-lg transition-colors aspect-square flex items-center justify-center ${template === name ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`} title={name}>
+                            <Icon className="w-7 h-7" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-            {/* Social Handles */}
-            <div>
-                <label className="text-xs font-medium text-gray-400">Social Handles</label>
-                <div className="space-y-2 mt-1">
-                    {socialHandles.map((handle) => (
-                        <div key={handle.id} className="flex items-center gap-2">
-                            <select
-                                value={handle.platform}
-                                onChange={(e) => updateSocialHandle(handle.id, 'platform', e.target.value as SocialPlatform)}
-                                className="bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 capitalize"
-                            >
-                                {socialPlatforms.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                            </select>
-                            <input
-                                type="text"
-                                value={handle.username}
-                                onChange={(e) => updateSocialHandle(handle.id, 'username', e.target.value)}
-                                placeholder="your-handle"
-                                className={`flex-grow bg-gray-700 border rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 transition ${!handle.username.trim() ? 'border-red-500/60 focus:border-red-500' : 'border-gray-600 focus:border-indigo-500'}`}
-                            />
-                            <button type="button" onClick={() => removeSocialHandle(handle.id)} className="p-2 text-gray-500 hover:text-red-400 rounded-full transition-colors">
-                                <TrashIcon className="w-5 h-5" />
+                    {/* Social Handles */}
+                    <div>
+                        <label className="text-xs font-medium text-gray-400">Social Handles</label>
+                        <div className="space-y-2 mt-1">
+                            {socialHandles.map((handle) => (
+                                <div key={handle.id} className="flex items-center gap-2">
+                                    <select
+                                        value={handle.platform}
+                                        onChange={(e) => updateSocialHandle(handle.id, 'platform', e.target.value as SocialPlatform)}
+                                        className="bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 capitalize"
+                                    >
+                                        {socialPlatforms.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={handle.username}
+                                        onChange={(e) => updateSocialHandle(handle.id, 'username', e.target.value)}
+                                        placeholder="your-handle"
+                                        className={`flex-grow bg-gray-700 border rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 transition ${!handle.username.trim() ? 'border-red-500/60 focus:border-red-500' : 'border-gray-600 focus:border-indigo-500'}`}
+                                    />
+                                    <button type="button" onClick={() => removeSocialHandle(handle.id)} className="p-2 text-gray-500 hover:text-red-400 rounded-full transition-colors">
+                                        <TrashIcon className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            ))}
+                             <button type="button" onClick={addSocialHandle} className="w-full text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors py-1">
+                                + Add Handle
                             </button>
                         </div>
-                    ))}
-                     <button type="button" onClick={addSocialHandle} className="w-full text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors py-1">
-                        + Add Handle
-                    </button>
-                </div>
-            </div>
-        </fieldset>
+                    </div>
+                </fieldset>
+            )}
+        </div>
 
         {/* Step 3: Content */}
-        <fieldset disabled={isTextGenerated}>
+        <fieldset>
              <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                     3. Provide Your Content
@@ -510,7 +504,7 @@ export const InputForm: React.FC<InputFormProps> = ({
         </fieldset>
        
         {/* Step 4: Tone & Audience */}
-        <fieldset disabled={isTextGenerated}>
+        <fieldset>
             <div>
                 <h3 className="block text-sm font-medium text-gray-300 mb-2">
                     4. Define Tone &amp; Audience
@@ -583,13 +577,25 @@ export const InputForm: React.FC<InputFormProps> = ({
                         {backgroundImagePreviews.length > 0 && (
                             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-4">
                                 {backgroundImagePreviews.map((url, index) => (
-                                    <img 
-                                        key={index} 
-                                        src={url} 
-                                        className={`w-full h-20 object-cover rounded-md cursor-pointer transition-all duration-200 ${selectedUploadIndex === index ? 'ring-4 ring-offset-2 ring-offset-gray-900 ring-indigo-500' : 'hover:opacity-75'}`}
-                                        onClick={() => setSelectedUploadIndex(index)}
-                                        alt={`Uploaded background ${index + 1}`}
-                                    />
+                                    <div key={index} className="relative group">
+                                        <img 
+                                            src={url} 
+                                            className={`w-full h-20 object-cover rounded-md cursor-pointer transition-all duration-200 ${selectedUploadIndex === index ? 'ring-4 ring-offset-2 ring-offset-gray-900 ring-indigo-500' : 'hover:opacity-75'}`}
+                                            onClick={() => setSelectedUploadIndex(index)}
+                                            alt={`Uploaded background ${index + 1}`}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveBackgroundImage(index);
+                                            }}
+                                            className="absolute top-1 right-1 bg-black bg-opacity-60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-opacity-80"
+                                            aria-label={`Remove image ${index + 1}`}
+                                        >
+                                            <XIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -623,22 +629,10 @@ export const InputForm: React.FC<InputFormProps> = ({
                 )}
                 {backgroundSource === 'ai' && (
                     <div className="bg-gray-800/50 p-4 rounded-lg mt-2 space-y-4 border border-gray-700">
-                         {isTextGenerated && (
-                            <div>
-                                <label htmlFor="imagePrompt" className="text-sm font-medium text-gray-300">Image Prompt (edit as needed)</label>
-                                <textarea
-                                    id="imagePrompt"
-                                    rows={4}
-                                    className="w-full mt-2 bg-gray-700 border border-gray-500 rounded-lg p-3 text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                                    value={imagePrompt}
-                                    onChange={(e) => setImagePrompt(e.target.value)}
-                                />
-                            </div>
-                         )}
                         <div>
                             <span className="text-xs font-medium text-gray-400">Image Style</span>
                             <div className="flex flex-wrap gap-2 mt-1">
-                            {(['Photorealistic', 'Abstract', 'Minimalist', 'Cinematic', 'Fantasy', 'Sci-Fi', 'Vintage', 'Watercolor', 'Cyberpunk'] as const).map((style) => (
+                            {(['Photorealistic', 'Cinematic', 'Vintage', 'Watercolor', 'Impressionism', 'Pop-Art', 'Surrealism', 'Abstract', 'Minimalist', 'Fantasy', 'Sci-Fi', 'Cyberpunk', 'Steampunk', 'Gothic'] as const).map((style) => (
                                 <button
                                 key={style}
                                 type="button"
@@ -656,19 +650,13 @@ export const InputForm: React.FC<InputFormProps> = ({
                 )}
             </div>
         </div>
-        
-        {isTextGenerated && (
-            <div className="bg-green-900/50 border border-green-500/50 text-green-300 text-sm p-4 rounded-lg text-center animate-fade-in">
-                Text content generated! Review your branding and background, then proceed.
-            </div>
-        )}
 
         <div className="pt-4">
             <button
                 type="submit"
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-900 transition-transform transform hover:scale-105"
             >
-                {isTextGenerated ? <><MagicWandIcon className="w-5 h-5" /> Generate Image & Review</> : <><SparklesIcon className="w-5 h-5" /> Generate Text & Prompt</> }
+                <SparklesIcon className="w-5 h-5" /> Generate Post
             </button>
         </div>
 

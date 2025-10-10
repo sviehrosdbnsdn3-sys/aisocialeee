@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import type { GeneratedTextContent, LogoPosition, DesignTemplate, FontStyle, BrandKit, SocialHandle, SocialPlatform } from '../types';
-import { getTemplateDefaults } from '../types';
-import { DownloadIcon, ClipboardIcon, CheckIcon, RedoIcon, MagicWandIcon, ClassicLayoutIcon, TopBarLayoutIcon, HeavyBottomLayoutIcon, SplitVerticalLayoutIcon, MinimalLayoutIcon, FramedLayoutIcon, TrashIcon, QuoteFocusLayoutIcon, NewsBannerLayoutIcon, PencilIcon } from './icons';
+import type { GeneratedTextContent, LogoPosition, DesignTemplate, FontStyle, BrandKit, SocialHandle, SocialPlatform, AspectRatio } from '../types';
+import { getTemplateDefaults, fontDisplayNames, socialPlatforms, isRtl } from '../types';
+import { DownloadIcon, ClipboardIcon, CheckIcon, RedoIcon, MagicWandIcon, TrashIcon, PencilIcon, XIcon, InstagramIcon, FacebookIcon, LinkedInIcon, WebsiteIcon, ChevronDownIcon, LogoPositionIcon, AspectRatioIcon, templates } from './icons';
 import { rewriteHeadline } from '../services/geminiService';
 
 interface ReviewPanelProps {
@@ -11,7 +12,7 @@ interface ReviewPanelProps {
   logoFile: File | null;
   onStartOver: () => void;
   originalContent: string;
-  combineImages: (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[]) => Promise<string>;
+  combineImages: (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[], aspectRatio: AspectRatio) => Promise<string>;
   backgroundType: 'ai' | 'upload' | 'library';
   onRegenerateImage: (prompt: string) => void;
   isRegeneratingImage: boolean;
@@ -31,26 +32,8 @@ const fontStyles: Record<FontStyle, React.CSSProperties> = {
   'mb-sindhi': { fontFamily: "'MB Sindhi', sans-serif" },
 };
 
-const fontDisplayNames: Record<FontStyle, string> = {
-    'sans-serif': 'Sans Serif',
-    'serif': 'Serif',
-    'monospace': 'Monospace',
-    'jameel-noori': 'Jameel Noori',
-    'mb-sindhi': 'MB Sindhi',
-};
-
-const socialPlatforms: { value: SocialPlatform, label: string }[] = [
-    { value: 'x', label: 'X (Twitter)' },
-    { value: 'instagram', label: 'Instagram' },
-    { value: 'facebook', label: 'Facebook' },
-    { value: 'linkedin', label: 'LinkedIn' },
-    { value: 'website', label: 'Website' },
-];
-
-const isRtl = (text: string) => {
-    const rtlRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-    return rtlRegex.test(text);
-};
+const logoPositions: LogoPosition[] = ['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right'];
+const aspectRatios: AspectRatio[] = ['1:1', '4:5', '16:9'];
 
 const CopyableField: React.FC<{ text: string; style: React.CSSProperties }> = ({ text, style }) => {
     const [copied, setCopied] = useState(false);
@@ -144,21 +127,23 @@ const HeadlineEditor: React.FC<{
     );
 };
 
+const SocialIcon: React.FC<{ platform: SocialPlatform; className?: string }> = ({ platform, className }) => {
+    const icons: Record<SocialPlatform, React.FC<any>> = {
+        'x': XIcon,
+        'instagram': InstagramIcon,
+        'facebook': FacebookIcon,
+        'linkedin': LinkedInIcon,
+        'website': WebsiteIcon,
+    };
+    const IconComponent = icons[platform];
+    if (!IconComponent) return null;
+    return <IconComponent className={className} />;
+};
+
 const MIN_FONT_MULTIPLIER = 0.5;
 const MAX_FONT_MULTIPLIER = 2.0;
 const FONT_STEP = 0.1;
 const BASE_FONT_SIZE = 49; // Based on a 1080px canvas: Math.max(24, Math.round(1080 / 22))
-
-const templates: { name: DesignTemplate, Icon: React.FC<any> }[] = [
-    { name: 'classic', Icon: ClassicLayoutIcon },
-    { name: 'top-bar', Icon: TopBarLayoutIcon },
-    { name: 'heavy-bottom', Icon: HeavyBottomLayoutIcon },
-    { name: 'split-vertical', Icon: SplitVerticalLayoutIcon },
-    { name: 'minimal', Icon: MinimalLayoutIcon },
-    { name: 'framed', Icon: FramedLayoutIcon },
-    { name: 'quote-focus', Icon: QuoteFocusLayoutIcon },
-    { name: 'news-banner', Icon: NewsBannerLayoutIcon },
-];
 
 export const ReviewPanel: React.FC<ReviewPanelProps> = ({ 
     content, 
@@ -199,7 +184,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
   const [textColor, setTextColor] = useState(initialDefaults.textColor);
   const [textShadow, setTextShadow] = useState(initialDefaults.textShadow);
   const [socialHandles, setSocialHandles] = useState<SocialHandle[]>(initialSocialHandles || []);
-  
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
+
   const [sizeMode, setSizeMode] = useState<'px' | 'multiplier'>('px');
   const [sizeInput, setSizeInput] = useState(String(Math.round(initialDefaults.fontSizeMultiplier * BASE_FONT_SIZE)));
 
@@ -209,6 +195,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
 
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [currentImagePrompt, setCurrentImagePrompt] = useState(imagePrompt);
+  const [socialHandleFeedback, setSocialHandleFeedback] = useState('');
 
 
   const headlineToRender = selectedHeadline === 'h1' ? headline1 : headline2;
@@ -271,7 +258,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
         setIsCombining(true);
         try {
           const fontFamily = fontStyles[selectedFont].fontFamily as string;
-          const newImage = await combineImages(baseImageSrc, logoFile, headlineToRender, logoPosition, fontFamily, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles);
+          const newImage = await combineImages(baseImageSrc, logoFile, headlineToRender, logoPosition, fontFamily, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles, aspectRatio);
           setFinalImage(newImage);
         } catch (error) {
           console.error("Failed to regenerate image:", error);
@@ -285,7 +272,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     return () => {
       clearTimeout(handler);
     };
-  }, [headlineToRender, logoPosition, baseImageSrc, logoFile, combineImages, selectedFont, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles]);
+  }, [headlineToRender, logoPosition, baseImageSrc, logoFile, combineImages, selectedFont, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles, aspectRatio]);
   
   useEffect(() => {
     setCurrentImagePrompt(imagePrompt);
@@ -315,7 +302,6 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     onRegenerateImage(currentImagePrompt);
     setIsEditingPrompt(false);
   };
-
 
   const performSave = () => {
     const trimmedName = newKitName.trim();
@@ -378,28 +364,34 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
   };
 
   const addSocialHandle = () => {
-    setSocialHandles([...socialHandles, { id: Date.now().toString(), platform: 'x', username: '' }]);
+    setSocialHandles(prevHandles => [...prevHandles, { id: Date.now().toString(), platform: 'x', username: '' }]);
+    setSocialHandleFeedback('Handle added.');
+    setTimeout(() => setSocialHandleFeedback(''), 2000);
   };
 
   const updateSocialHandle = (id: string, field: 'platform' | 'username', value: string) => {
-    setSocialHandles(socialHandles.map(h => h.id === id ? { ...h, [field]: value } : h));
+    setSocialHandles(prevHandles => prevHandles.map(h => h.id === id ? { ...h, [field]: value } : h));
   };
 
   const removeSocialHandle = (id: string) => {
-    setSocialHandles(socialHandles.filter(h => h.id !== id));
+    setSocialHandles(prevHandles => prevHandles.filter(h => h.id !== id));
+    setSocialHandleFeedback('Handle removed.');
+    setTimeout(() => setSocialHandleFeedback(''), 2000);
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
       {/* Left side: Image and actions */}
       <div className="space-y-4">
-        <div className="relative aspect-square bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700">
-          {isCombining || isRegeneratingImage ? (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
-              <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-indigo-400"></div>
+        <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700">
+            <div className={`relative w-full mx-auto ${aspectRatio === '1:1' ? 'aspect-square' : aspectRatio === '4:5' ? 'aspect-[4/5]' : 'aspect-video'}`}>
+              {isCombining || isRegeneratingImage ? (
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
+                  <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-indigo-400"></div>
+                </div>
+              ) : null}
+              <img src={finalImage} alt="Generated social media post" className="w-full h-full object-cover" />
             </div>
-          ) : null}
-          <img src={finalImage} alt="Generated social media post" className="w-full h-full object-cover" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <a
@@ -474,195 +466,234 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
           <div className="space-y-3">
             <HeadlineEditor id="h1" value={headline1} onChange={setHeadline1} onRewrite={() => handleRewrite('h1')} onSelect={() => setSelectedHeadline('h1')} isSelected={selectedHeadline === 'h1'} isRewriting={rewriting === 'h1'} fontStyle={fontStyles[selectedFont]} />
             <HeadlineEditor id="h2" value={headline2} onChange={setHeadline2} onRewrite={() => handleRewrite('h2')} onSelect={() => setSelectedHeadline('h2')} isSelected={selectedHeadline === 'h2'} isRewriting={rewriting === 'h2'} fontStyle={fontStyles[selectedFont]} />
-            {rewriteError && <p className="text-sm text-red-400">{rewriteError}</p>}
+            {rewriteError && <p className="text-red-400 text-sm text-center">{rewriteError}</p>}
           </div>
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-gray-200 mb-2">2. Copy Summary & Hashtags</h3>
-          <div className="space-y-3">
-             <CopyableField text={about} style={fontStyles[selectedFont]} />
-             <CopyableField text={hashtags} style={fontStyles[selectedFont]} />
+          <h3 className="text-lg font-semibold text-gray-200 mb-2">2. Select Template</h3>
+          <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-2">
+              {templates.map(({ name, Icon }) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setSelectedTemplate(name)}
+                  className={`p-2 rounded-lg transition-colors aspect-square flex items-center justify-center ${selectedTemplate === name ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                  title={name}
+                >
+                  <Icon className="w-7 h-7" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4">
-            <h3 className="text-xl font-bold text-white">3. Customize Image</h3>
-            
-            <div>
-              <label className="text-xs font-medium text-gray-400">Template</label>
-              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mt-1">
-                {templates.map(({ name, Icon }) => (
-                  <button key={name} onClick={() => setSelectedTemplate(name)} className={`p-2 rounded-lg transition-colors aspect-square flex items-center justify-center ${selectedTemplate === name ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`} title={name}>
-                    <Icon className="w-8 h-8" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
+        <div>
+          <h3 className="text-lg font-semibold text-gray-200 mb-2">3. Customize Details</h3>
+          <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 space-y-4">
             <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="brand-color" className="text-xs font-medium text-gray-400 block mb-1">Brand Color</label>
-                  <input id="brand-color" type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer" />
-                </div>
-                <div>
-                  <label htmlFor="text-color" className="text-xs font-medium text-gray-400 block mb-1">Text Color</label>
-                  <input id="text-color" type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer" />
-                </div>
+              <div>
+                <label htmlFor="brand-color-review" className="text-sm font-medium text-gray-400 block mb-2">Brand Color</label>
+                <input id="brand-color-review" type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer" />
+              </div>
+               <div>
+                <label htmlFor="text-color-review" className="text-sm font-medium text-gray-400 block mb-2">Text Color</label>
+                <input id="text-color-review" type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-lg cursor-pointer" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-400 block mb-2">Font Style</label>
+              <select value={selectedFont} onChange={(e) => setSelectedFont(e.target.value as FontStyle)} className="w-full h-10 bg-gray-700 border border-gray-600 rounded-lg p-2 text-gray-200 focus:ring-2 focus:ring-indigo-500">
+                  {Object.entries(fontDisplayNames).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                  ))}
+              </select>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-400">Font Style</label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {(Object.keys(fontDisplayNames) as FontStyle[]).map(font => (
-                  <button key={font} onClick={() => setSelectedFont(font)} className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-lg ${selectedFont === font ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-                    {fontDisplayNames[font]}
+              <label className="text-sm font-medium text-gray-400">Aspect Ratio</label>
+              <div className="flex justify-between items-center gap-2 mt-2">
+                {aspectRatios.map(ratio => (
+                  <button
+                    key={ratio}
+                    type="button"
+                    onClick={() => setAspectRatio(ratio)}
+                    className={`p-2 rounded-lg transition-colors aspect-square flex items-center justify-center w-full ${aspectRatio === ratio ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                    title={`Ratio ${ratio}`}
+                  >
+                    <AspectRatioIcon ratio={ratio} className="w-8 h-8" />
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-                <label htmlFor="font-size-slider" className="text-xs font-medium text-gray-400 mb-1 block">
-                    Headline Font Size
-                </label>
-                <div className="flex items-center gap-4">
-                    <input
-                        id="font-size-slider"
-                        type="range"
-                        min={MIN_FONT_MULTIPLIER}
-                        max={MAX_FONT_MULTIPLIER}
-                        step={FONT_STEP}
-                        value={fontSizeMultiplier}
-                        onChange={(e) => handleMultiplierChange(parseFloat(e.target.value))}
-                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                        aria-label="Headline Font Size Multiplier"
-                    />
-                    <div className="flex items-center gap-2">
-                         <input
-                            type="number"
-                            value={sizeInput}
-                            onChange={handleSizeInputChange}
-                            onBlur={handleSizeInputBlur}
-                            step={sizeMode === 'px' ? 1 : FONT_STEP}
-                            className="w-20 bg-gray-900 border border-gray-600 rounded-lg p-2 text-center text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            aria-label={sizeMode === 'px' ? 'Headline Font Size in pixels' : 'Headline Font Size Multiplier'}
-                         />
-                         <button 
-                            type="button" 
-                            onClick={() => setSizeMode(m => m === 'px' ? 'multiplier' : 'px')} 
-                            className="w-12 flex-shrink-0 text-center text-sm font-medium bg-gray-700 text-gray-300 rounded-lg py-2 hover:bg-gray-600 transition-colors"
-                            aria-label={`Switch to ${sizeMode === 'px' ? 'multiplier' : 'pixel'} input`}
-                        >
-                            {sizeMode === 'px' ? 'px' : 'x'}
-                        </button>
+              <label className="text-sm font-medium text-gray-400">Logo Position</label>
+              <div className="flex justify-between items-center gap-2 mt-2">
+                {logoPositions.map(pos => (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => setLogoPosition(pos)}
+                    className={`p-2 rounded-lg transition-colors aspect-square flex items-center justify-center w-full ${logoPosition === pos ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                    title={pos.replace('-', ' ')}
+                  >
+                    <LogoPositionIcon position={pos} className="w-7 h-7" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-end sm:gap-6">
+                <div className="flex-grow">
+                    <div className="flex justify-between items-baseline">
+                        <label htmlFor="font-size" className="text-sm font-medium text-gray-400">Font Size</label>
+                        <span className="text-xs font-mono text-gray-500">Multiplier: {fontSizeMultiplier.toFixed(2)}x</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                        <button onClick={() => handleMultiplierChange(fontSizeMultiplier - FONT_STEP)} className="px-2 py-1 text-lg bg-gray-700 rounded-md hover:bg-gray-600">-</button>
+                        <input 
+                            id="font-size"
+                            type="range"
+                            min={MIN_FONT_MULTIPLIER}
+                            max={MAX_FONT_MULTIPLIER}
+                            step={FONT_STEP / 10}
+                            value={fontSizeMultiplier}
+                            onChange={(e) => handleMultiplierChange(parseFloat(e.target.value))}
+                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <button onClick={() => handleMultiplierChange(fontSizeMultiplier + FONT_STEP)} className="px-2 py-1 text-lg bg-gray-700 rounded-md hover:bg-gray-600">+</button>
+                         <div className="relative w-24">
+                            <input
+                                type="number"
+                                value={sizeInput}
+                                onChange={handleSizeInputChange}
+                                onBlur={handleSizeInputBlur}
+                                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-center text-gray-200 focus:ring-2 focus:ring-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button onClick={() => setSizeMode(s => s === 'px' ? 'multiplier' : 'px')} className="absolute right-1 top-1/2 -translate-y-1/2 text-xs bg-gray-600/50 text-gray-400 px-1 rounded hover:bg-gray-500/50">
+                                {sizeMode}
+                            </button>
+                         </div>
                     </div>
                 </div>
+                <div className="mt-4 sm:mt-0">
+                    <label className="text-sm font-medium text-gray-400 block mb-2">Text Shadow</label>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={textShadow}
+                        onClick={() => setTextShadow(!textShadow)}
+                        className={`relative inline-flex flex-shrink-0 h-8 w-14 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 ${
+                            textShadow ? 'bg-indigo-600' : 'bg-gray-700'
+                        }`}
+                    >
+                        <span className="sr-only">Toggle text shadow</span>
+                        <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow-lg transform ring-0 transition ease-in-out duration-200 ${
+                            textShadow ? 'translate-x-6' : 'translate-x-0'
+                            }`}
+                        />
+                    </button>
+                </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-400">Logo Position</label>
-                  <div className="grid grid-cols-3 gap-1 mt-1">
-                    {(['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right'] as LogoPosition[]).map(pos => (
-                      <button key={pos} onClick={() => setLogoPosition(pos)} className={`p-2 rounded-md aspect-square ${logoPosition === pos ? 'bg-indigo-600' : 'bg-gray-700 hover:bg-gray-600'}`}></button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-400">Text Shadow</label>
-                  <div className="mt-1">
-                    <button onClick={() => setTextShadow(s => !s)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${textShadow ? 'bg-indigo-600' : 'bg-gray-600'}`}>
-                      <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${textShadow ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </button>
-                  </div>
-                </div>
-            </div>
-             <div>
-                <label className="text-xs font-medium text-gray-400">Social Handles</label>
-                <div className="space-y-2 mt-1">
+            <div>
+              <label className="text-sm font-medium text-gray-400">Social Handles</label>
+                <div className="space-y-2 mt-2">
                     {socialHandles.map((handle) => (
                         <div key={handle.id} className="flex items-center gap-2">
-                            <select
-                                value={handle.platform}
-                                onChange={(e) => updateSocialHandle(handle.id, 'platform', e.target.value as SocialPlatform)}
-                                className="bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 capitalize"
-                            >
-                                {socialPlatforms.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                            </select>
+                             <div className="relative">
+                                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                    <SocialIcon platform={handle.platform} className="w-5 h-5 text-gray-400" />
+                                </div>
+                                <select
+                                    value={handle.platform}
+                                    onChange={(e) => updateSocialHandle(handle.id, 'platform', e.target.value as SocialPlatform)}
+                                    className="bg-gray-700 border border-gray-600 rounded-lg py-2 pl-10 pr-8 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 capitalize appearance-none"
+                                >
+                                    {socialPlatforms.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                    <ChevronDownIcon className="w-4 h-4 text-gray-400" />
+                                </div>
+                            </div>
                             <input
                                 type="text"
                                 value={handle.username}
                                 onChange={(e) => updateSocialHandle(handle.id, 'username', e.target.value)}
                                 placeholder="your-handle"
-                                className={`flex-grow bg-gray-700 border rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 transition-colors ${!handle.username.trim() ? 'border-red-500/60' : 'border-gray-600'}`}
+                                className={`flex-grow bg-gray-700 border rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 transition ${!handle.username.trim() ? 'border-red-500/60 focus:border-red-500' : 'border-gray-600 focus:border-indigo-500'}`}
                             />
-                            <button type="button" onClick={() => removeSocialHandle(handle.id)} className="p-2 text-gray-500 hover:text-red-400 rounded-full">
+                            <button type="button" onClick={() => removeSocialHandle(handle.id)} className="p-2 text-gray-500 hover:text-red-400 rounded-full transition-colors">
                                 <TrashIcon className="w-5 h-5" />
                             </button>
                         </div>
                     ))}
-                    <button
-                        type="button"
-                        onClick={addSocialHandle}
-                        className="w-full text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors py-1"
-                    >
-                        + Add Handle
-                    </button>
+                     <div>
+                        <button type="button" onClick={addSocialHandle} className="w-full text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors py-1">
+                            + Add Handle
+                        </button>
+                        <div className="h-4 mt-1 text-center">
+                            {socialHandleFeedback && (
+                                <p className="text-xs text-green-400 animate-fade-in-fast">
+                                    {socialHandleFeedback}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-gray-200 mb-2">4. Save Brand Kit</h3>
+          <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+            <div className="flex gap-2">
+                <input
+                    type="text"
+                    value={newKitName}
+                    onChange={(e) => {
+                        setNewKitName(e.target.value);
+                        if (isConfirmingOverwrite) {
+                            setIsConfirmingOverwrite(false);
+                            setKitSaveMessage('');
+                        }
+                    }}
+                    placeholder="New Kit Name..."
+                    className="flex-grow bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500"
+                />
+                 <button onClick={handleSaveKit} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+                    Save
+                </button>
+            </div>
+            {isConfirmingOverwrite && (
+                <div className="mt-2 flex gap-2 justify-end animate-fade-in-fast">
+                    <button onClick={handleCancelOverwrite} className="px-3 py-1 text-xs text-gray-300 bg-gray-600 rounded-md hover:bg-gray-500">Cancel</button>
+                    <button onClick={handleConfirmOverwrite} className="px-3 py-1 text-xs text-white bg-red-600 rounded-md hover:bg-red-700">Overwrite</button>
+                </div>
+            )}
+            {kitSaveMessage && <p className={`text-sm mt-2 ${isConfirmingOverwrite ? 'text-yellow-400' : 'text-green-400'}`}>{kitSaveMessage}</p>}
+          </div>
+        </div>
+
+        <div>
+            <h3 className="text-lg font-semibold text-gray-200 mb-2">5. Final Content</h3>
+            <div className="space-y-4">
+                <div>
+                    <label className="text-sm font-medium text-gray-400">About</label>
+                    <CopyableField text={about} style={fontStyles[selectedFont]} />
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-gray-400">Hashtags</label>
+                    <CopyableField text={hashtags} style={{fontFamily: "'Noto Sans Mono', monospace"}}/>
                 </div>
             </div>
         </div>
 
-        {/* Save Brand Kit */}
-        <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-3">
-            <h3 className="text-xl font-bold text-white">4. Save as Brand Kit</h3>
-            <p className="text-sm text-gray-400">Save the current logo, color, font, and template for future use. A logo is required.</p>
-            <div className="flex gap-2">
-                <input 
-                    type="text"
-                    value={newKitName}
-                    onChange={(e) => setNewKitName(e.target.value)}
-                    placeholder="Enter kit name..."
-                    className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                    disabled={isConfirmingOverwrite}
-                />
-                <button
-                    onClick={handleSaveKit}
-                    className="px-6 py-2 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
-                    disabled={isConfirmingOverwrite || !logoFile}
-                    title={!logoFile ? "A logo is required to save a kit" : "Save brand kit"}
-                >
-                    Save
-                </button>
-            </div>
-            {kitSaveMessage && (
-                <div className={`mt-2 p-3 rounded-lg border text-sm ${
-                    isConfirmingOverwrite 
-                        ? 'bg-yellow-900/50 border-yellow-500/50 text-yellow-300' 
-                        : kitSaveMessage.includes('successfully') 
-                            ? 'bg-green-900/50 border-green-500/50 text-green-300' 
-                            : 'bg-red-900/50 border-red-500/50 text-red-300'
-                }`}>
-                    <p>{kitSaveMessage}</p>
-                    {isConfirmingOverwrite && (
-                        <div className="flex justify-end gap-2 mt-2">
-                            <button
-                                onClick={handleCancelOverwrite}
-                                className="px-4 py-1 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition-colors text-xs"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleConfirmOverwrite}
-                                className="px-4 py-1 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition-colors text-xs"
-                            >
-                                Confirm Overwrite
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
       </div>
     </div>
   );
