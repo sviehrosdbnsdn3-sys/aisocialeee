@@ -5,7 +5,7 @@ import { ReviewPanel } from './components/ReviewPanel';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { BrandKitManager } from './components/BrandKitManager';
 import { generateTextAndImagePrompt, generateImage } from './services/geminiService';
-import type { GeneratedTextContent, BrandKit, BackgroundChoice, LogoPosition, DesignTemplate, FontStyle, SocialHandle, SocialPlatform, AppStep, AspectRatio } from './types';
+import type { GeneratedTextContent, BrandKit, BackgroundChoice, LogoPosition, DesignTemplate, FontStyle, SocialHandle, SocialPlatform, AppStep, AspectRatio, VAlign, HAlign } from './types';
 import { getTemplateDefaults, isRtl } from './types';
 import { SparklesIcon, quoteIconPath } from './components/icons';
 
@@ -23,6 +23,8 @@ interface ReviewState {
     font: FontStyle;
     template: DesignTemplate;
     socialHandles: SocialHandle[];
+    vAlign: VAlign;
+    hAlign: HAlign;
 }
 
 // ... (other imports)
@@ -98,7 +100,7 @@ const App: React.FC = () => {
   };
 
 
-  const combineImages = useCallback(async (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[], aspectRatio: AspectRatio): Promise<string> => {
+  const combineImages = useCallback(async (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[], aspectRatio: AspectRatio, vAlign: VAlign, hAlign: HAlign): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -126,7 +128,7 @@ const App: React.FC = () => {
         // As per design rules, ensure text is at least 80px away from elements below it.
         const safeAreaPadding = 80; 
 
-        const drawHeadline = (text: string, boxX: number, boxY: number, boxWidth: number, boxHeight: number, vAlign: 'top' | 'center' | 'bottom' = 'bottom', hAlign: 'left' | 'center' = 'left') => {
+        const drawHeadline = (text: string, boxX: number, boxY: number, boxWidth: number, boxHeight: number, vAlign: VAlign = 'bottom', hAlign: HAlign = 'left') => {
             const baseFontSize = Math.max(24, Math.round(canvas.width / 22));
             let fontSize = baseFontSize * fontSizeMultiplier;
 
@@ -163,24 +165,18 @@ const App: React.FC = () => {
 
             } while (textBlockHeight > boxHeight && fontSize > 18); // Don't let font get too small
             
-            let startY;
-            
-            if (vAlign === 'bottom') {
-                startY = boxY + boxHeight - ((lines.length -1) * lineHeight) - (lineHeight - fontSize);
+            let textBlockY;
+            if (vAlign === 'top') {
+              textBlockY = boxY;
             } else if (vAlign === 'center') {
-                startY = boxY + (boxHeight - textBlockHeight) / 2 + fontSize * 0.9;
-            } else { // top
-                startY = boxY + fontSize;
+              textBlockY = boxY + (boxHeight - textBlockHeight) / 2;
+            } else { // 'bottom'
+              textBlockY = boxY + boxHeight - textBlockHeight;
             }
             
             const textIsRtl = isRtl(text);
             ctx.direction = textIsRtl ? 'rtl' : 'ltr';
-            
-            if (hAlign === 'center') {
-              ctx.textAlign = 'center';
-            } else {
-              ctx.textAlign = textIsRtl ? 'right' : 'left';
-            }
+            ctx.textAlign = hAlign;
 
             ctx.textBaseline = 'top';
             ctx.fillStyle = textColor;
@@ -197,10 +193,13 @@ const App: React.FC = () => {
                 let startX;
                 if (hAlign === 'center') {
                   startX = boxX + boxWidth / 2;
-                } else {
-                  startX = textIsRtl ? boxX + boxWidth : boxX;
+                } else if (hAlign === 'right') {
+                  startX = boxX + boxWidth;
+                } else { // 'left'
+                  startX = boxX;
                 }
-                ctx.fillText(l, startX, startY + (i * lineHeight));
+                const startY = textBlockY + (i * lineHeight);
+                ctx.fillText(l, startX, startY);
             });
             
             ctx.restore();
@@ -316,7 +315,6 @@ const App: React.FC = () => {
                     logoWidth = logoHeight * logoAspectRatio;
                 }
                 
-                // Draw logo without background
                 ctx.drawImage(logoImage, padding, padding, logoWidth, logoHeight);
             }
 
@@ -359,6 +357,7 @@ const App: React.FC = () => {
             let lines: string[];
             let lineHeight: number;
             let textBlockHeight: number;
+            
             do {
                 ctx.font = `900 ${fontSize}px ${fontFamily}`;
                 lineHeight = fontSize * 1.15;
@@ -381,20 +380,39 @@ const App: React.FC = () => {
                 }
             } while (textBlockHeight > headlineBox.height && fontSize > 20);
             
-            const startY = headlineBox.y + (headlineBox.height - textBlockHeight) / 2 + fontSize * 0.9;
+            let textBlockY;
+            if (vAlign === 'top') {
+                textBlockY = headlineBox.y;
+            } else if (vAlign === 'center') {
+                textBlockY = headlineBox.y + (headlineBox.height - textBlockHeight) / 2;
+            } else { // 'bottom'
+                textBlockY = headlineBox.y + headlineBox.height - textBlockHeight;
+            }
+            
             ctx.textBaseline = 'top';
             ctx.font = `900 ${fontSize}px ${fontFamily}`;
             
             const textIsRtl = isRtl(headline);
             ctx.direction = textIsRtl ? 'rtl' : 'ltr';
-            ctx.textAlign = textIsRtl ? 'right' : 'left';
 
             const accentWordCount = 2;
             let wordCounter = 0;
             lines.forEach((line, i) => {
-                const lineY = startY + (i * lineHeight);
-                let currentX = textIsRtl ? headlineBox.x + headlineBox.width : headlineBox.x;
+                const lineY = textBlockY + (i * lineHeight);
+                const lineWidth = ctx.measureText(line).width;
+                
+                let lineStartX;
+                if (hAlign === 'center') {
+                    lineStartX = headlineBox.x + (headlineBox.width - lineWidth) / 2;
+                } else if (hAlign === 'right') {
+                    lineStartX = headlineBox.x + headlineBox.width - lineWidth;
+                } else { // 'left'
+                    lineStartX = headlineBox.x;
+                }
+
+                let currentX = textIsRtl ? lineStartX + lineWidth : lineStartX;
                 const wordsInLine = line.split(' ');
+                ctx.textAlign = textIsRtl ? 'right' : 'left';
 
                 wordsInLine.forEach(word => {
                     if (word.trim() === '') return;
@@ -450,7 +468,7 @@ const App: React.FC = () => {
             ctx.fillStyle = brandColor;
             ctx.fillRect(0, bottomBarY, canvas.width, bottomBarHeight);
 
-            drawHeadline(headline, padding, bottomBarY + padding/2, canvas.width - padding*2, bottomBarHeight - padding, 'center');
+            drawHeadline(headline, padding, bottomBarY + padding/2, canvas.width - padding*2, bottomBarHeight - padding, vAlign, hAlign);
         };
 
         const drawQuoteFocusTemplate = () => {
@@ -476,7 +494,7 @@ const App: React.FC = () => {
             const headlineBoxY = padding;
             const headlineBoxHeight = socialBarY - headlineBoxY - safeAreaPadding;
 
-            drawHeadline(headline, padding, headlineBoxY, canvas.width - padding*2, headlineBoxHeight, 'center', 'center');
+            drawHeadline(headline, padding, headlineBoxY, canvas.width - padding*2, headlineBoxHeight, vAlign, hAlign);
             
             drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2));
         };
@@ -502,9 +520,9 @@ const App: React.FC = () => {
                 
                 const textX = dividerX + padding;
                 const textWidth = canvas.width - textX - padding;
-                drawHeadline(headline, textX, bannerY, textWidth, bannerHeight, 'center');
+                drawHeadline(headline, textX, bannerY, textWidth, bannerHeight, vAlign, hAlign);
             } else {
-                drawHeadline(headline, padding, bannerY, canvas.width - padding*2, bannerHeight, 'center');
+                drawHeadline(headline, padding, bannerY, canvas.width - padding*2, bannerHeight, vAlign, hAlign);
             }
         };
 
@@ -520,8 +538,8 @@ const App: React.FC = () => {
             ctx.fillStyle = 'rgba(0,0,0,0.75)';
             ctx.fillRect(0, textBarY, canvas.width, textBarHeight);
             
-            const headlineBoxHeight = textBarHeight - padding - safeAreaPadding;
-            drawHeadline(headline, padding, textBarY + padding, canvas.width - padding*2, headlineBoxHeight, 'center');
+            const headlineBoxHeight = textBarHeight - padding;
+            drawHeadline(headline, padding, textBarY, canvas.width - padding*2, headlineBoxHeight, vAlign, hAlign);
 
             ctx.fillStyle = 'black';
             ctx.fillRect(0, canvas.height - socialBarHeight, canvas.width, socialBarHeight);
@@ -573,7 +591,7 @@ const App: React.FC = () => {
 
             const socialBarHeight = canvas.height * 0.075;
             const textHeight = canvas.height - textY - socialBarHeight - padding;
-            drawHeadline(headline, splitPoint + rightPadding, textY, splitPoint - rightPadding * 2, textHeight, 'center');
+            drawHeadline(headline, splitPoint + rightPadding, textY, splitPoint - rightPadding * 2, textHeight, vAlign, hAlign);
             
             drawSocialHandles(ctx, socialHandles, canvas.height - (socialBarHeight / 2), { x: splitPoint, width: splitPoint });
         };
@@ -588,8 +606,8 @@ const App: React.FC = () => {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.fillRect(0, textOverlayY, canvas.width, textOverlayHeight);
             
-            const headlineBoxHeight = textOverlayHeight - padding * 2 - safeAreaPadding;
-            drawHeadline(headline, padding, textOverlayY + padding, canvas.width - padding*2, headlineBoxHeight, 'center');
+            const headlineBoxHeight = textOverlayHeight - padding;
+            drawHeadline(headline, padding, textOverlayY, canvas.width - padding*2, headlineBoxHeight, vAlign, hAlign);
             
             ctx.fillStyle = brandColor;
             ctx.fillRect(0, canvas.height - socialBarHeight, canvas.width, socialBarHeight);
@@ -640,7 +658,7 @@ const App: React.FC = () => {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
             ctx.fillRect(innerX, bannerY, innerWidth, bannerHeight);
             
-            drawHeadline(headline, innerX + padding, bannerY + padding / 2, innerWidth - padding * 2, bannerHeight - padding, 'center', 'center');
+            drawHeadline(headline, innerX + padding, bannerY + padding / 2, innerWidth - padding * 2, bannerHeight - padding, vAlign, hAlign);
             drawSocialHandles(ctx, socialHandles, canvas.height - (borderSize / 2));
         };
         
@@ -676,7 +694,7 @@ const App: React.FC = () => {
             
             const headlineBoxY = gradientY;
             const headlineBoxHeight = socialBarY - headlineBoxY - safeAreaPadding;
-            drawHeadline(headline, padding, headlineBoxY, canvas.width - padding * 2, headlineBoxHeight, 'bottom');
+            drawHeadline(headline, padding, headlineBoxY, canvas.width - padding * 2, headlineBoxHeight, vAlign, hAlign);
             
             drawLogo(logoPosition, {x: 0, y: 0, width: canvas.width, height: socialBarY });
 
@@ -756,11 +774,15 @@ const App: React.FC = () => {
         setLogoFile(logo);
         setSocialHandles(socialHandles);
 
+        const { logoPosition, fontSizeMultiplier, textColor, textShadow, vAlign, hAlign } = getTemplateDefaults(template);
+        
         const reviewState: ReviewState = {
             brandColor,
             font,
             template,
             socialHandles,
+            vAlign,
+            hAlign,
         };
         setInitialReviewState(reviewState);
 
@@ -785,8 +807,6 @@ const App: React.FC = () => {
         } else if (backgroundForImageGen.type === 'library') {
             baseImageSrc = backgroundForImageGen.url;
         }
-
-        const { logoPosition, fontSizeMultiplier, textColor, textShadow } = getTemplateDefaults(template);
         
         const fontFamilies: Record<FontStyle, string> = {
             'sans-serif': "'Noto Sans', sans-serif",
@@ -808,7 +828,9 @@ const App: React.FC = () => {
             textColor,
             textShadow,
             socialHandles,
-            '1:1' // Initial generation is always 1:1
+            '1:1', // Initial generation is always 1:1
+            vAlign,
+            hAlign
         );
 
         setReviewData({
@@ -901,6 +923,8 @@ const App: React.FC = () => {
                     initialFont={initialReviewState.font}
                     initialTemplate={initialReviewState.template}
                     initialSocialHandles={initialReviewState.socialHandles}
+                    initialVAlign={initialReviewState.vAlign}
+                    initialHAlign={initialReviewState.hAlign}
                     brandKits={brandKits}
                 />;
         }

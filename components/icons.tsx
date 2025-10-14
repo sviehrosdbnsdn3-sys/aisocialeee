@@ -242,3 +242,39 @@ export const templates: { name: DesignTemplate, Icon: React.FC<any> }[] = [
     { name: 'news-banner', Icon: NewsBannerLayoutIcon },
     { name: 'rt-news', Icon: RTNewsLayoutIcon },
 ];
+
+export const AlignLeftIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 4V20M8 7H16M8 12H20M8 17H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);
+
+export const AlignCenterHorizontalIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 4V20M18 7H6M20 12H4M18 17H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);
+
+export const AlignRightIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 4V20M16 7H8M16 12H4M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);
+
+export const AlignTopIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 4H20M7 8V16M12 8V20M17 8V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);
+
+export const AlignCenterVerticalIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 12H20M7 6V18M12 4V20M17 6V18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);
+
+export const AlignBottomIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 20H20M7 16V8M12 16V4M17 16V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+);

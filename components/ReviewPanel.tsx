@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import type { GeneratedTextContent, LogoPosition, DesignTemplate, FontStyle, BrandKit, SocialHandle, SocialPlatform, AspectRatio } from '../types';
+import type { GeneratedTextContent, LogoPosition, DesignTemplate, FontStyle, BrandKit, SocialHandle, SocialPlatform, AspectRatio, VAlign, HAlign } from '../types';
 import { getTemplateDefaults, fontDisplayNames, socialPlatforms, isRtl } from '../types';
-import { DownloadIcon, ClipboardIcon, CheckIcon, RedoIcon, MagicWandIcon, TrashIcon, PencilIcon, XIcon, InstagramIcon, FacebookIcon, LinkedInIcon, WebsiteIcon, ChevronDownIcon, LogoPositionIcon, AspectRatioIcon, templates } from './icons';
+import { DownloadIcon, ClipboardIcon, CheckIcon, RedoIcon, MagicWandIcon, TrashIcon, PencilIcon, XIcon, InstagramIcon, FacebookIcon, LinkedInIcon, WebsiteIcon, ChevronDownIcon, LogoPositionIcon, AspectRatioIcon, templates, AlignTopIcon, AlignCenterVerticalIcon, AlignBottomIcon, AlignLeftIcon, AlignCenterHorizontalIcon, AlignRightIcon } from './icons';
 import { rewriteHeadline } from '../services/geminiService';
 
 interface ReviewPanelProps {
@@ -12,7 +12,7 @@ interface ReviewPanelProps {
   logoFile: File | null;
   onStartOver: () => void;
   originalContent: string;
-  combineImages: (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[], aspectRatio: AspectRatio) => Promise<string>;
+  combineImages: (baseImageSrc: string, logoFile: File | null, headline: string, logoPosition: LogoPosition, fontFamily: string, template: DesignTemplate, brandColor: string, fontSizeMultiplier: number, textColor: string, textShadow: boolean, socialHandles: SocialHandle[], aspectRatio: AspectRatio, vAlign: VAlign, hAlign: HAlign) => Promise<string>;
   backgroundType: 'ai' | 'upload' | 'library';
   onRegenerateImage: (prompt: string) => void;
   isRegeneratingImage: boolean;
@@ -21,6 +21,8 @@ interface ReviewPanelProps {
   initialFont?: FontStyle;
   initialTemplate?: DesignTemplate;
   initialSocialHandles?: SocialHandle[];
+  initialVAlign?: VAlign;
+  initialHAlign?: HAlign;
   brandKits: BrandKit[];
 }
 
@@ -143,7 +145,6 @@ const SocialIcon: React.FC<{ platform: SocialPlatform; className?: string }> = (
 const MIN_FONT_MULTIPLIER = 0.5;
 const MAX_FONT_MULTIPLIER = 2.0;
 const FONT_STEP = 0.1;
-const BASE_FONT_SIZE = 49; // Based on a 1080px canvas: Math.max(24, Math.round(1080 / 22))
 
 export const ReviewPanel: React.FC<ReviewPanelProps> = ({ 
     content, 
@@ -161,6 +162,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     initialFont,
     initialTemplate,
     initialSocialHandles,
+    initialVAlign,
+    initialHAlign,
     brandKits
 }) => {
   const [headline1, setHeadline1] = useState(content.headline1);
@@ -185,9 +188,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
   const [textShadow, setTextShadow] = useState(initialDefaults.textShadow);
   const [socialHandles, setSocialHandles] = useState<SocialHandle[]>(initialSocialHandles || []);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
-
-  const [sizeMode, setSizeMode] = useState<'px' | 'multiplier'>('px');
-  const [sizeInput, setSizeInput] = useState(String(Math.round(initialDefaults.fontSizeMultiplier * BASE_FONT_SIZE)));
+  const [vAlign, setVAlign] = useState<VAlign>(initialVAlign || initialDefaults.vAlign);
+  const [hAlign, setHAlign] = useState<HAlign>(initialHAlign || initialDefaults.hAlign);
 
   const [newKitName, setNewKitName] = useState('');
   const [kitSaveMessage, setKitSaveMessage] = useState('');
@@ -205,42 +207,6 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     const clampedMultiplier = Math.max(MIN_FONT_MULTIPLIER, Math.min(MAX_FONT_MULTIPLIER, newMultiplier));
     setFontSizeMultiplier(clampedMultiplier);
   };
-  
-  useEffect(() => {
-    if (sizeMode === 'px') {
-        setSizeInput(String(Math.round(fontSizeMultiplier * BASE_FONT_SIZE)));
-    } else {
-        setSizeInput(fontSizeMultiplier.toFixed(2));
-    }
-  }, [fontSizeMultiplier, sizeMode]);
-  
-  const handleSizeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSizeInput(val);
-    if (sizeMode === 'px') {
-        const numVal = parseInt(val, 10);
-        if (!isNaN(numVal) && numVal > 0) {
-            const newMultiplier = numVal / BASE_FONT_SIZE;
-            handleMultiplierChange(newMultiplier);
-        }
-    } else { // multiplier mode
-        const floatVal = parseFloat(val);
-        if (!isNaN(floatVal)) {
-            handleMultiplierChange(floatVal);
-        }
-    }
-  };
-
-  const handleSizeInputBlur = () => {
-      const val = sizeMode === 'px' ? parseInt(sizeInput, 10) : parseFloat(sizeInput);
-      if (isNaN(val) || (sizeMode === 'px' && val <= 0)) {
-          if (sizeMode === 'px') {
-              setSizeInput(String(Math.round(fontSizeMultiplier * BASE_FONT_SIZE)));
-          } else {
-              setSizeInput(fontSizeMultiplier.toFixed(2));
-          }
-      }
-  };
 
   useEffect(() => {
     // When the template changes, reset other controls to good defaults for that template.
@@ -249,6 +215,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     setFontSizeMultiplier(newDefaults.fontSizeMultiplier);
     setTextColor(newDefaults.textColor);
     setTextShadow(newDefaults.textShadow);
+    setVAlign(newDefaults.vAlign);
+    setHAlign(newDefaults.hAlign);
   }, [selectedTemplate]);
 
   useEffect(() => {
@@ -258,7 +226,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
         setIsCombining(true);
         try {
           const fontFamily = fontStyles[selectedFont].fontFamily as string;
-          const newImage = await combineImages(baseImageSrc, logoFile, headlineToRender, logoPosition, fontFamily, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles, aspectRatio);
+          const newImage = await combineImages(baseImageSrc, logoFile, headlineToRender, logoPosition, fontFamily, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles, aspectRatio, vAlign, hAlign);
           setFinalImage(newImage);
         } catch (error) {
           console.error("Failed to regenerate image:", error);
@@ -272,7 +240,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     return () => {
       clearTimeout(handler);
     };
-  }, [headlineToRender, logoPosition, baseImageSrc, logoFile, combineImages, selectedFont, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles, aspectRatio]);
+  }, [headlineToRender, logoPosition, baseImageSrc, logoFile, combineImages, selectedFont, selectedTemplate, brandColor, fontSizeMultiplier, textColor, textShadow, socialHandles, aspectRatio, vAlign, hAlign]);
   
   useEffect(() => {
     setCurrentImagePrompt(imagePrompt);
@@ -545,37 +513,59 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
               </div>
             </div>
 
+            <div>
+              <label className="text-sm font-medium text-gray-400">Text Alignment</label>
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                  {(['top', 'center', 'bottom'] as VAlign[]).map((pos, i) => (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => setVAlign(pos)}
+                      className={`p-2 rounded-md transition-colors w-full flex items-center justify-center ${vAlign === pos ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-600'}`}
+                      title={`Align ${pos}`}
+                    >
+                      { i === 0 && <AlignTopIcon className="w-6 h-6" /> }
+                      { i === 1 && <AlignCenterVerticalIcon className="w-6 h-6" /> }
+                      { i === 2 && <AlignBottomIcon className="w-6 h-6" /> }
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                  {(['left', 'center', 'right'] as HAlign[]).map((pos, i) => (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => setHAlign(pos)}
+                      className={`p-2 rounded-md transition-colors w-full flex items-center justify-center ${hAlign === pos ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-600'}`}
+                      title={`Align ${pos}`}
+                    >
+                      { i === 0 && <AlignLeftIcon className="w-6 h-6" /> }
+                      { i === 1 && <AlignCenterHorizontalIcon className="w-6 h-6" /> }
+                      { i === 2 && <AlignRightIcon className="w-6 h-6" /> }
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row sm:items-end sm:gap-6">
                 <div className="flex-grow">
                     <div className="flex justify-between items-baseline">
                         <label htmlFor="font-size" className="text-sm font-medium text-gray-400">Font Size</label>
-                        <span className="text-xs font-mono text-gray-500">Multiplier: {fontSizeMultiplier.toFixed(2)}x</span>
+                        <span className="text-sm font-mono text-gray-400">{fontSizeMultiplier.toFixed(1)}x</span>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
-                        <button onClick={() => handleMultiplierChange(fontSizeMultiplier - FONT_STEP)} className="px-2 py-1 text-lg bg-gray-700 rounded-md hover:bg-gray-600">-</button>
                         <input 
                             id="font-size"
                             type="range"
                             min={MIN_FONT_MULTIPLIER}
                             max={MAX_FONT_MULTIPLIER}
-                            step={FONT_STEP / 10}
+                            step={FONT_STEP}
                             value={fontSizeMultiplier}
                             onChange={(e) => handleMultiplierChange(parseFloat(e.target.value))}
                             className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                         />
-                        <button onClick={() => handleMultiplierChange(fontSizeMultiplier + FONT_STEP)} className="px-2 py-1 text-lg bg-gray-700 rounded-md hover:bg-gray-600">+</button>
-                         <div className="relative w-24">
-                            <input
-                                type="number"
-                                value={sizeInput}
-                                onChange={handleSizeInputChange}
-                                onBlur={handleSizeInputBlur}
-                                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-2 text-sm text-center text-gray-200 focus:ring-2 focus:ring-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <button onClick={() => setSizeMode(s => s === 'px' ? 'multiplier' : 'px')} className="absolute right-1 top-1/2 -translate-y-1/2 text-xs bg-gray-600/50 text-gray-400 px-1 rounded hover:bg-gray-500/50">
-                                {sizeMode}
-                            </button>
-                         </div>
                     </div>
                 </div>
                 <div className="mt-4 sm:mt-0">
