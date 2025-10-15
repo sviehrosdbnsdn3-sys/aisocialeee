@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { GeneratedTextContent, LogoPosition, DesignTemplate, FontStyle, BrandKit, SocialHandle, SocialPlatform, AspectRatio, VAlign, HAlign } from '../types';
 import { getTemplateDefaults, fontDisplayNames, socialPlatforms, isRtl } from '../types';
-import { DownloadIcon, ClipboardIcon, CheckIcon, RedoIcon, MagicWandIcon, TrashIcon, PencilIcon, XIcon, InstagramIcon, FacebookIcon, LinkedInIcon, WebsiteIcon, ChevronDownIcon, LogoPositionIcon, AspectRatioIcon, templates, AlignTopIcon, AlignCenterVerticalIcon, AlignBottomIcon, AlignLeftIcon, AlignCenterHorizontalIcon, AlignRightIcon } from './icons';
+import { DownloadIcon, ClipboardIcon, CheckIcon, RedoIcon, MagicWandIcon, TrashIcon, PencilIcon, XIcon, InstagramIcon, FacebookIcon, LinkedInIcon, WebsiteIcon, ChevronDownIcon, LogoPositionIcon, AspectRatioIcon, templates, AlignTopIcon, AlignCenterVerticalIcon, AlignBottomIcon, AlignLeftIcon, AlignCenterHorizontalIcon, AlignRightIcon, ShareIcon, ThreadsIcon, PinterestIcon, TikTokIcon } from './icons';
 import { rewriteHeadline } from '../services/geminiService';
 
 interface ReviewPanelProps {
@@ -135,6 +135,9 @@ const SocialIcon: React.FC<{ platform: SocialPlatform; className?: string }> = (
         'instagram': InstagramIcon,
         'facebook': FacebookIcon,
         'linkedin': LinkedInIcon,
+        'threads': ThreadsIcon,
+        'pinterest': PinterestIcon,
+        'tiktok': TikTokIcon,
         'website': WebsiteIcon,
     };
     const IconComponent = icons[platform];
@@ -145,6 +148,64 @@ const SocialIcon: React.FC<{ platform: SocialPlatform; className?: string }> = (
 const MIN_FONT_MULTIPLIER = 0.5;
 const MAX_FONT_MULTIPLIER = 2.0;
 const FONT_STEP = 0.1;
+
+
+const ShareModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onShare: (platform: string) => void;
+}> = ({ isOpen, onClose, onShare }) => {
+  if (!isOpen) return null;
+
+  const platforms = [
+    { name: 'X / Twitter', icon: XIcon, id: 'twitter' },
+    { name: 'Instagram', icon: InstagramIcon, id: 'instagram' },
+    { name: 'Facebook', icon: FacebookIcon, id: 'facebook' },
+    { name: 'LinkedIn', icon: LinkedInIcon, id: 'linkedin' },
+    { name: 'Threads', icon: ThreadsIcon, id: 'threads' },
+    { name: 'Pinterest', icon: PinterestIcon, id: 'pinterest' },
+    { name: 'TikTok', icon: TikTokIcon, id: 'tiktok' },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 transition-opacity animate-fade-in-fast"
+      onClick={onClose}
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 w-full max-w-md m-4 transform transition-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center p-5 border-b border-gray-700">
+          <h2 className="text-xl font-bold text-white">Share to</h2>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-full transition-colors" aria-label="Close">
+            <XIcon className="w-6 h-6" />
+          </button>
+        </div>
+        <div className="p-6">
+          <p className="text-sm text-gray-400 mb-4">
+            Your caption has been copied. Click a platform to open it in a new tab, then paste your caption and upload the image.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {platforms.map(({ name, icon: Icon, id }) => (
+              <button
+                key={id}
+                onClick={() => onShare(id)}
+                className="flex flex-col items-center justify-center gap-2 p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-800"
+              >
+                <Icon className="w-8 h-8 text-white" />
+                <span className="text-sm font-medium text-gray-200">{name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 export const ReviewPanel: React.FC<ReviewPanelProps> = ({ 
     content, 
@@ -178,7 +239,6 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
   
   const [selectedTemplate, setSelectedTemplate] = useState<DesignTemplate>(initialTemplate || 'classic');
   
-  // Get initial defaults based on the initial template
   const initialDefaults = getTemplateDefaults(selectedTemplate);
 
   const [logoPosition, setLogoPosition] = useState<LogoPosition>(initialDefaults.logoPosition);
@@ -198,6 +258,9 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [currentImagePrompt, setCurrentImagePrompt] = useState(imagePrompt);
   const [socialHandleFeedback, setSocialHandleFeedback] = useState('');
+  
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareConfirmation, setShareConfirmation] = useState('');
 
 
   const headlineToRender = selectedHeadline === 'h1' ? headline1 : headline2;
@@ -209,7 +272,6 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
   };
 
   useEffect(() => {
-    // When the template changes, reset other controls to good defaults for that template.
     const newDefaults = getTemplateDefaults(selectedTemplate);
     setLogoPosition(newDefaults.logoPosition);
     setFontSizeMultiplier(newDefaults.fontSizeMultiplier);
@@ -346,8 +408,87 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
     setSocialHandleFeedback('Handle removed.');
     setTimeout(() => setSocialHandleFeedback(''), 2000);
   };
+  
+  const handlePlatformShare = (platform: string) => {
+    const caption = `${about}\n\n${hashtags}`;
+    const encodedCaption = encodeURIComponent(caption);
+    let confirmationMessage = '✅ Caption copied! Please download the image to complete your post.';
+
+    // This is the fallback for desktop browsers, so we always copy text
+    navigator.clipboard.writeText(caption);
+
+    let shareUrl = '';
+
+    switch(platform) {
+        case 'twitter':
+            shareUrl = `https://twitter.com/intent/tweet?text=${encodedCaption}`;
+            confirmationMessage = '✅ Caption copied! A new tab has opened for you to post on X.';
+            break;
+        case 'instagram':
+            shareUrl = 'https://www.instagram.com';
+            confirmationMessage = '✅ Caption copied! Please create a new post on Instagram.';
+            break;
+        case 'facebook':
+            shareUrl = `https://www.facebook.com/`;
+            confirmationMessage = '✅ Caption copied! Please create a new post on Facebook.';
+            break;
+        case 'linkedin':
+            shareUrl = `https://www.linkedin.com/feed/?shareActive=true`;
+            confirmationMessage = '✅ Caption copied! Please create a new post on LinkedIn.';
+            break;
+        case 'pinterest':
+            shareUrl = `https://www.pinterest.com/`;
+            confirmationMessage = '✅ Caption copied! Please upload your image and paste the caption on Pinterest.';
+            break;
+        case 'threads':
+            shareUrl = 'https://www.threads.net';
+            confirmationMessage = '✅ Caption copied! Please create a new post on Threads.';
+            break;
+        case 'tiktok':
+            shareUrl = 'https://www.tiktok.com/upload';
+            confirmationMessage = '✅ Caption copied! Please upload your image and paste the caption on TikTok.';
+            break;
+        default:
+             confirmationMessage = `✅ Caption copied! Please open ${platform} to share.`;
+             break;
+    }
+
+    if (shareUrl) {
+        window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    setShareConfirmation(confirmationMessage);
+    setIsShareModalOpen(false);
+    setTimeout(() => setShareConfirmation(''), 5000);
+  };
+  
+  const attemptShare = async () => {
+    const caption = `${about}\n\n${hashtags}`;
+    try {
+        const response = await fetch(finalImage);
+        const blob = await response.blob();
+        const file = new File([blob], 'social_post.png', { type: 'image/png' });
+
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                text: caption,
+                title: 'AI Generated Social Post',
+            });
+            setShareConfirmation('✅ Post shared successfully!');
+            setTimeout(() => setShareConfirmation(''), 5000);
+        } else {
+            // If Web Share is not supported, open our custom modal.
+            setIsShareModalOpen(true);
+        }
+    } catch (error) {
+        console.error("Web Share API failed, opening platform modal.", error);
+        setIsShareModalOpen(true);
+    }
+  };
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
       {/* Left side: Image and actions */}
       <div className="space-y-4">
@@ -361,14 +502,20 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
               <img src={finalImage} alt="Generated social media post" className="w-full h-full object-cover" />
             </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <a
             href={finalImage}
             download="social_post.png"
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-gray-600 text-base font-medium rounded-md shadow-sm text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition"
           >
             <DownloadIcon className="w-5 h-5" /> Download
           </a>
+          <button
+            onClick={attemptShare}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition"
+          >
+            <ShareIcon className="w-5 h-5" /> Share
+          </button>
           <button
             onClick={onStartOver}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-gray-600 text-base font-medium rounded-md shadow-sm text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition"
@@ -376,6 +523,11 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
             Start Over
           </button>
         </div>
+        {shareConfirmation && (
+          <div className="bg-green-900/50 border border-green-400/30 text-green-300 text-sm text-center p-3 rounded-lg animate-fade-in-fast">
+            {shareConfirmation}
+          </div>
+        )}
         {backgroundType === 'ai' && (
             <div className="bg-gray-800/50 p-3 rounded-lg border border-gray-700 space-y-3">
                 {isEditingPrompt ? (
@@ -686,5 +838,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({
 
       </div>
     </div>
+    <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} onShare={handlePlatformShare} />
+    </>
   );
 };

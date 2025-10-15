@@ -129,47 +129,40 @@ export const generateImage = async (prompt: string): Promise<string> => {
 };
 
 export const getContentFromURL = async (url: string): Promise<string> => {
-  const prompt = `You are an expert web scraper bot. Your task is to fetch, parse, and extract the main article content from the given URL, simulating a standard web browser.
-
-**URL to process:** ${url}
-
-**Instructions:**
-1.  **Simulate Browser:** When fetching, use a common desktop browser User-Agent (like Chrome on Windows) to ensure compatibility.
-2.  **Identify Main Content Container:** Analyze the HTML to find the single element that holds the main article body. Look for semantic tags like \`<article>\` or \`<main>\`, or common container IDs/classes such as \`.article-body\`, \`.post-content\`, \`.description\`, or \`.detail-description\`.
-3.  **Extract Paragraphs:** Once you've identified the main content container, extract the text **only from the \`<p>\` (paragraph) tags found within it.** This is the most critical step for getting clean article text.
-4.  **Format Clean Text:**
-    - Join the text from each paragraph with a double newline (\\n\\n) to preserve paragraph breaks.
-    - **Crucially, exclude all non-essential elements**: headers, footers, navigation, sidebars, ads, comments, and "related articles" links.
-5.  **Error Handling & Validation:**
-    - If the URL is invalid, inaccessible (e.g., 404, paywall, connection error), return the single, specific error code: \`FETCH_FAILED_UNACCESSIBLE\`.
-    - If the page loads but has no discernible main article (e.g., it's an index page, a gallery, a login page) OR the extracted text is less than 100 characters, return the single, specific error code: \`FETCH_FAILED_NO_ARTICLE\`.
-
-If successful, return only the extracted article text. Do not add any introductory or concluding phrases.`;
+  const systemInstruction = `You are an AI assistant specialized in extracting the main article text from a given URL. You must use the provided tools to access the URL's content. Your response should only be the cleaned-up article text, with paragraphs separated by double newlines. Remove all navigation, ads, headers, footers, and sidebars. If the URL is inaccessible, or if there's no main article content, return an empty string. Do not include any explanations, apologies, or extra text in your response.`;
+  const prompt = `Please extract the main article content from the following URL: ${url}`;
   
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        systemInstruction: systemInstruction,
+        tools: [{googleSearch: {}}],
+      },
     });
-    const extractedText = response.text.trim();
+    const extractedText = response.text ? response.text.trim() : '';
+    
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const searchUsed = groundingMetadata?.groundingChunks?.length > 0;
+    
+    // If search wasn't used, the model probably couldn't proceed. Treat this as a failure.
+    if (!searchUsed) {
+        throw new Error("The AI's search tool did not activate. Please ensure the URL is valid and publicly accessible.");
+    }
 
-    if (extractedText === 'FETCH_FAILED_UNACCESSIBLE') {
-      throw new Error("The URL is invalid or the content is inaccessible. Please check the link and ensure it's a public page.");
-    }
-    if (extractedText === 'FETCH_FAILED_NO_ARTICLE') {
-      throw new Error("No main article content could be found at this URL. It might be a homepage, gallery, or requires a login.");
-    }
+    // If search was used but the result is empty, it means the model failed to extract content as per instructions.
     if (!extractedText) {
-        throw new Error("The AI couldn't extract any text from the URL. The page might be empty or formatted in an unusual way.");
+        throw new Error("No main article content could be found. The URL might be inaccessible, behind a paywall, or not indexed by Google Search.");
     }
 
     return extractedText;
   } catch (error) {
     console.error("Failed to fetch content from URL:", error);
-    // If it's one of our custom errors, re-throw it. Otherwise, throw a generic one.
-    if (error instanceof Error && (error.message.includes("inaccessible") || error.message.includes("No main article") || error.message.includes("couldn't extract any text"))) {
-        throw error;
+    if (error instanceof Error && (error.message.includes("search tool did not activate") || error.message.includes("No main article content"))) {
+        throw error; // Re-throw our specific, user-friendly errors.
     }
-    throw new Error("The AI failed to retrieve content from the URL. This could be due to a network issue or website restrictions.");
+    // Catch-all for other API errors or unexpected issues.
+    throw new Error("An unexpected error occurred while fetching content from the URL.");
   }
 };

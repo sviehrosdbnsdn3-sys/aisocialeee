@@ -44,6 +44,14 @@ const base64ToFile = (dataUrl: string, filename: string): File => {
   return new File([u8arr], filename, { type: mime });
 };
 
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+
 const libraryImages = [
   'https://images.unsplash.com/photo-1504711434969-e33886168f5c?q=80&w=1200&auto=format&fit=crop',
   'https://images.unsplash.com/photo-1495020689067-958852a7765e?q=80&w=1200&auto=format&fit=crop',
@@ -104,6 +112,91 @@ export const InputForm: React.FC<InputFormProps> = ({
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
+
+  // Load state from localStorage on initial render
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const savedStateJSON = localStorage.getItem('userInputFormState');
+        if (savedStateJSON) {
+          const savedState = JSON.parse(savedStateJSON);
+
+          // Restore simple state
+          setContent(savedState.content || '');
+          setTone(savedState.tone || 'News');
+          setAudience(savedState.audience || '');
+          setBackgroundSource(savedState.backgroundSource || 'ai');
+          setSelectedUploadIndex(savedState.selectedUploadIndex ?? null);
+          setSelectedLibraryImage(savedState.selectedLibraryImage || null);
+          setImageStyle(savedState.imageStyle || 'Photorealistic');
+          setUrl(savedState.url || '');
+          setSocialHandles(savedState.socialHandles || []);
+          setBrandColor(savedState.brandColor || '#B91C1C');
+          setFont(savedState.font || 'sans-serif');
+          setTemplate(savedState.template || 'classic');
+          setIsBrandingOpen(savedState.isBrandingOpen ?? true);
+
+          // Restore logo
+          if (savedState.logo) {
+            const logoFile = base64ToFile(savedState.logo, 'saved-logo');
+            setLogo(logoFile);
+            setLogoPreview(URL.createObjectURL(logoFile));
+          }
+
+          // Restore background images
+          if (savedState.backgroundImageFiles && savedState.backgroundImageFiles.length > 0) {
+            const bgFiles = savedState.backgroundImageFiles.map((base64: string, index: number) => 
+              base64ToFile(base64, `saved-bg-${index}`)
+            );
+            setBackgroundImageFiles(bgFiles);
+            const bgPreviews = bgFiles.map(file => URL.createObjectURL(file));
+            setBackgroundImagePreviews(bgPreviews);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load form state from localStorage", error);
+        localStorage.removeItem('userInputFormState');
+      }
+    };
+    loadData();
+  }, []); // Empty array ensures this runs only once on mount
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    const saveData = async () => {
+      try {
+        const logoBase64 = logo ? await fileToBase64(logo) : null;
+        const bgImagesBase64 = await Promise.all(backgroundImageFiles.map(file => fileToBase64(file)));
+
+        const stateToSave = {
+          content,
+          logo: logoBase64,
+          tone,
+          audience,
+          backgroundSource,
+          backgroundImageFiles: bgImagesBase64,
+          selectedUploadIndex,
+          selectedLibraryImage,
+          imageStyle,
+          url,
+          socialHandles,
+          brandColor,
+          font,
+          template,
+          isBrandingOpen,
+        };
+
+        localStorage.setItem('userInputFormState', JSON.stringify(stateToSave));
+      } catch (error) {
+        console.error("Failed to save form state to localStorage", error);
+      }
+    };
+    saveData();
+  }, [
+    content, logo, tone, audience, backgroundSource, backgroundImageFiles,
+    selectedUploadIndex, selectedLibraryImage, imageStyle, url, socialHandles,
+    brandColor, font, template, isBrandingOpen
+  ]);
   
   useEffect(() => {
     return () => {

@@ -16,7 +16,7 @@ export interface GeneratedTextContent {
   hashtags: string;
 }
 
-export type SocialPlatform = 'x' | 'instagram' | 'facebook' | 'linkedin' | 'website';
+export type SocialPlatform = 'x' | 'instagram' | 'facebook' | 'linkedin' | 'threads' | 'pinterest' | 'tiktok' | 'website';
 
 export interface SocialHandle {
   id: string;
@@ -76,5 +76,8 @@ export const socialPlatforms: { value: SocialPlatform, label: string }[] = [
     { value: 'instagram', label: 'Instagram' },
     { value: 'facebook', label: 'Facebook' },
     { value: 'linkedin', label: 'LinkedIn' },
+    { value: 'threads', label: 'Threads' },
+    { value: 'pinterest', label: 'Pinterest' },
+    { value: 'tiktok', label: 'TikTok' },
     { value: 'website', label: 'Website' },
 ];

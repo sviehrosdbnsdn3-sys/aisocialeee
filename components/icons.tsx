@@ -278,3 +278,29 @@ export const AlignBottomIcon: React.FC<IconProps> = (props) => (
         <path d="M4 20H20M7 16V8M12 16V4M17 16V8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
 );
+
+export const ShareIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" transform="rotate(-90 12 12) translate(0 -2)" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 11V3" />
+    </svg>
+);
+
+export const ThreadsIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 9.062a4.482 4.482 0 0 0-4.482 4.481 4.482 4.482 0 0 0 4.482 4.482c2.476 0 4.896-.957 6.338-2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M18.5 12.5h-13c0-5.523 4.477-10 10-10 4.142 0 7.84 2.21 9.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+);
+
+export const PinterestIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12.017 0C5.385 0 0 5.385 0 12.017c0 5.075 3.063 9.432 7.427 11.246-.017-.932.023-2.31.25-3.26.233-.98.15-1.12.15-1.12s-.525-.21-.525-1.155c0-1.085.645-1.89 1.45-1.89.69 0 1.025.525 1.025 1.155 0 .69-.435 1.73-.66 2.66-.195.795.39 1.45 1.185 1.45 1.425 0 2.512-1.5 2.512-3.645 0-1.92-1.38-3.24-3.322-3.24-2.22 0-3.51 1.665-3.51 3.39 0 .69.255 1.425.57 1.845.06.09.075.165.045.285-.09.375-.285 1.155-.33 1.35-.06.24-.21.3-.495.18-1.395-.6-2.28-2.66-2.28-4.245 0-3.285 2.37-6.225 6.9-6.225 3.615 0 6.375 2.58 6.375 5.865 0 3.6-2.28 6.435-5.415 6.435-1.08 0-2.1-.555-2.445-1.185l-.57 2.19c-.225.87-1.305 2-2.025 2.745A11.96 11.96 0 0 0 12.017 24c6.633 0 12.017-5.385 12.017-12.017S18.65 0 12.017 0z"/>
+    </svg>
+);
+
+export const TikTokIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-2.43.03-4.83-1-6.72-2.81-1.83-1.74-2.91-4.08-2.96-6.51.02-2.86 1.1-5.54 2.79-7.56 1.77-2.1 4.28-3.42 7.05-3.48.01-.02.02-.02.03-.02z"/>
+    </svg>
+);

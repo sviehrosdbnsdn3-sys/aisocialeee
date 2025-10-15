@@ -1,7 +1,7 @@
-
 import React from 'react';
-import type { BrandKit } from '../types';
-import { TrashIcon } from './icons';
+import type { BrandKit, FontStyle } from '../types';
+import { fontDisplayNames } from '../types';
+import { TrashIcon, templates } from './icons';
 
 interface BrandKitManagerProps {
   isOpen: boolean;
@@ -10,6 +10,14 @@ interface BrandKitManagerProps {
   onDelete: (kitName: string) => void;
   onSelect: (kit: BrandKit) => void;
 }
+
+const fontStyles: Record<FontStyle, React.CSSProperties> = {
+  'sans-serif': { fontFamily: "'Noto Sans', sans-serif" },
+  'serif': { fontFamily: "'Noto Serif', serif" },
+  'monospace': { fontFamily: "'Noto Sans Mono', monospace" },
+  'jameel-noori': { fontFamily: "'Jameel Noori Nastaleeq', cursive" },
+  'mb-sindhi': { fontFamily: "'MB Sindhi', sans-serif" },
+};
 
 export const BrandKitManager: React.FC<BrandKitManagerProps> = ({ isOpen, onClose, kits, onDelete, onSelect }) => {
   if (!isOpen) return null;
@@ -36,49 +44,67 @@ export const BrandKitManager: React.FC<BrandKitManagerProps> = ({ isOpen, onClos
             <p className="text-gray-400 text-center py-8">You haven't saved any brand kits yet.</p>
           ) : (
             <ul className="space-y-4">
-              {kits.map(kit => (
-                <li key={kit.name} className="bg-gray-900 p-4 rounded-lg flex items-center justify-between border border-gray-700">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-gray-700 rounded-md flex items-center justify-center p-1">
-                      <img src={kit.logo} alt={`${kit.name} logo`} className="max-w-full max-h-full object-contain" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg text-white">{kit.name}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                          <div className="w-5 h-5 rounded-full border-2 border-gray-600" style={{ backgroundColor: kit.brandColor }}></div>
-                          <span className="text-sm text-gray-400 capitalize">{kit.font.replace(/-/g, ' ')}</span>
-                          <span className="text-sm text-gray-400 capitalize">&middot;</span>
-                          <span className="text-sm text-gray-400 capitalize">{kit.template.replace(/-/g, ' ')}</span>
+              {kits.map(kit => {
+                const TemplateIcon = templates.find(t => t.name === kit.template)?.Icon;
+                return (
+                  <li key={kit.name} className="bg-gray-900 p-4 rounded-lg flex items-center justify-between border border-gray-700">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-gray-700 rounded-md flex items-center justify-center p-1 flex-shrink-0">
+                        <img src={kit.logo} alt={`${kit.name} logo`} className="max-w-full max-h-full object-contain" />
                       </div>
-                      {kit.socialHandles && kit.socialHandles.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
-                          {kit.socialHandles.map(handle => handle.username && (
-                            <div key={handle.id} className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
-                              <span className="capitalize">{handle.platform}</span>: {handle.username}
-                            </div>
-                          ))}
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-lg text-white truncate">{kit.name}</h3>
+                        <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-2">
+                          {/* Color Preview */}
+                          <div className="flex items-center gap-2" title={`Brand Color: ${kit.brandColor}`}>
+                              <div className="w-5 h-5 rounded-full border-2 border-gray-600" style={{ backgroundColor: kit.brandColor }} />
+                              <span className="text-sm text-gray-400 font-mono">{kit.brandColor.toUpperCase()}</span>
+                          </div>
+
+                          {/* Font Preview */}
+                          <div className="flex items-center gap-2" title={`Font: ${fontDisplayNames[kit.font]}`}>
+                              <span style={fontStyles[kit.font]} className="text-lg text-gray-300">Aa</span>
+                              <span className="text-sm text-gray-400 capitalize">{fontDisplayNames[kit.font]}</span>
+                          </div>
+
+                          {/* Template Preview */}
+                          {TemplateIcon && (
+                              <div className="flex items-center gap-2" title={`Template: ${kit.template.replace(/-/g, ' ')}`}>
+                                  <TemplateIcon className="w-6 h-6 text-gray-500" />
+                                  <span className="text-sm text-gray-400 capitalize">{kit.template.replace(/-/g, ' ')}</span>
+                              </div>
+                          )}
                         </div>
-                      )}
+                        {kit.socialHandles && kit.socialHandles.filter(h => h.username).length > 0 && (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
+                            {kit.socialHandles.map(handle => handle.username && (
+                              <div key={handle.id} className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
+                                <span className="capitalize">{handle.platform}</span>: {handle.username}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button 
-                        onClick={() => onSelect(kit)}
-                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-800 transition-colors"
-                        aria-label={`Select ${kit.name} brand kit`}
-                    >
-                        Select
-                    </button>
-                    <button 
-                        onClick={() => onDelete(kit.name)}
-                        className="p-2 text-gray-500 hover:text-red-400 rounded-full transition-colors"
-                        aria-label={`Delete ${kit.name} brand kit`}
-                    >
-                        <TrashIcon className="w-6 h-6" />
-                    </button>
-                  </div>
-                </li>
-              ))}
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                      <button 
+                          onClick={() => onSelect(kit)}
+                          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-800 transition-colors"
+                          aria-label={`Select ${kit.name} brand kit`}
+                      >
+                          Select
+                      </button>
+                      <button 
+                          onClick={() => onDelete(kit.name)}
+                          className="p-2 text-gray-500 hover:text-red-400 rounded-full transition-colors"
+                          aria-label={`Delete ${kit.name} brand kit`}
+                      >
+                          <TrashIcon className="w-6 h-6" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
