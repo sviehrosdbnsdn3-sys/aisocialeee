@@ -1,8 +1,7 @@
-
 export type AppStep = 'input' | 'text-loading' | 'text-generated' | 'image-loading' | 'review' | 'error';
 export type FontStyle = 'sans-serif' | 'serif' | 'monospace' | 'jameel-noori' | 'mb-sindhi';
 export type LogoPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
-export type DesignTemplate = 'classic' | 'top-bar' | 'heavy-bottom' | 'split-vertical' | 'minimal' | 'framed' | 'quote-focus' | 'news-banner' | 'rt-news';
+export type DesignTemplate = 'classic' | 'top-bar' | 'heavy-bottom' | 'split-vertical' | 'minimal' | 'framed' | 'quote-focus' | 'news-banner' | 'rt-news' | 'stv-news';
 export type BackgroundChoice = { type: 'ai', prompt: string } | { type: 'upload', file: File } | { type: 'library', url: string };
 export type AspectRatio = '1:1' | '4:5' | '16:9';
 export type VAlign = 'top' | 'center' | 'bottom';
@@ -53,6 +52,8 @@ export const getTemplateDefaults = (template: DesignTemplate) => {
         return { logoPosition: 'top-left' as LogoPosition, fontSizeMultiplier: 1.0, textColor: '#FFFFFF', textShadow: false, vAlign: 'center' as VAlign, hAlign: 'left' as HAlign };
       case 'rt-news':
         return { logoPosition: 'top-left' as LogoPosition, fontSizeMultiplier: 1.15, textColor: '#000000', textShadow: false, vAlign: 'center' as VAlign, hAlign: 'left' as HAlign };
+      case 'stv-news':
+        return { logoPosition: 'bottom-right' as LogoPosition, fontSizeMultiplier: 1.2, textColor: '#FFFFFF', textShadow: true, vAlign: 'center' as VAlign, hAlign: 'center' as HAlign };
       default:
         return { logoPosition: 'bottom-right' as LogoPosition, fontSizeMultiplier: 1.0, textColor: '#FFFFFF', textShadow: true, vAlign: 'bottom' as VAlign, hAlign: 'left' as HAlign };
     }

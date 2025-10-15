@@ -668,28 +668,31 @@ export const InputForm: React.FC<InputFormProps> = ({
                 {backgroundSource === 'upload' && (
                     <div>
                         {backgroundImagePreviews.length > 0 && (
-                            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-4">
-                                {backgroundImagePreviews.map((url, index) => (
-                                    <div key={index} className="relative group">
-                                        <img 
-                                            src={url} 
-                                            className={`w-full h-20 object-cover rounded-md cursor-pointer transition-all duration-200 ${selectedUploadIndex === index ? 'ring-4 ring-offset-2 ring-offset-gray-900 ring-indigo-500' : 'hover:opacity-75'}`}
-                                            onClick={() => setSelectedUploadIndex(index)}
-                                            alt={`Uploaded background ${index + 1}`}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveBackgroundImage(index);
-                                            }}
-                                            className="absolute top-1 right-1 bg-black bg-opacity-60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-opacity-80"
-                                            aria-label={`Remove image ${index + 1}`}
-                                        >
-                                            <XIcon className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))}
+                             <div className="mb-4">
+                                <label className="text-xs font-medium text-gray-400 mb-2 block">Your Uploads (Select one)</label>
+                                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 mt-2">
+                                    {backgroundImagePreviews.map((url, index) => (
+                                        <div key={index} className="relative group">
+                                            <img 
+                                                src={url} 
+                                                className={`w-full h-20 object-cover rounded-md cursor-pointer transition-all duration-200 ${selectedUploadIndex === index ? 'ring-4 ring-offset-2 ring-offset-gray-900 ring-indigo-500' : 'hover:opacity-75'}`}
+                                                onClick={() => setSelectedUploadIndex(index)}
+                                                alt={`Uploaded background ${index + 1}`}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRemoveBackgroundImage(index);
+                                                }}
+                                                className="absolute top-1 right-1 bg-black bg-opacity-60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-opacity-80"
+                                                aria-label={`Remove image ${index + 1}`}
+                                            >
+                                                <XIcon className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
                         <label 

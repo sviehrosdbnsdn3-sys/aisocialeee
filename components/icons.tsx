@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { LogoPosition, AspectRatio, DesignTemplate } from '../types';
 
@@ -153,6 +152,18 @@ export const RTNewsLayoutIcon: React.FC<IconProps> = (props) => (
     </svg>
 );
 
+export const STVNewsLayoutIcon: React.FC<IconProps> = (props) => (
+    <svg {...props} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="4" fill="currentColor" fillOpacity="0.2"/>
+      <rect x="2" y="2" width="28" height="28" rx="2" fill="#002D62" fillOpacity="0.7"/>
+      <rect x="4" y="4" width="24" height="24" rx="1" fill="currentColor" fillOpacity="0.2"/>
+      <rect y="22" width="32" height="6" fill="currentColor" fillOpacity="0.8"/>
+      <rect y="28" width="32" height="4" fill="#002D62" fillOpacity="0.9"/>
+      <rect x="6" y="24" width="8" height="2" rx="1" fill="#FFD700"/>
+      <rect x="15" y="24" width="11" height="2" rx="1" fill="white"/>
+    </svg>
+);
+
 export const ChevronUpIcon: React.FC<IconProps> = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
@@ -241,6 +252,7 @@ export const templates: { name: DesignTemplate, Icon: React.FC<any> }[] = [
     { name: 'quote-focus', Icon: QuoteFocusLayoutIcon },
     { name: 'news-banner', Icon: NewsBannerLayoutIcon },
     { name: 'rt-news', Icon: RTNewsLayoutIcon },
+    { name: 'stv-news', Icon: STVNewsLayoutIcon },
 ];
 
 export const AlignLeftIcon: React.FC<IconProps> = (props) => (

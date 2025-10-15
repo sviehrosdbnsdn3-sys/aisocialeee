@@ -445,6 +445,160 @@ const App: React.FC = () => {
                 });
             });
         };
+        
+        const drawStvNewsTemplate = () => {
+            const frameColor = '#002D62';
+            const accentTextColor = '#FFD700';
+            const accentWordCount = 2;
+            
+            const outerFrameSize = canvas.width * 0.03;
+            const innerFrameSize = canvas.width * 0.015;
+            const totalFrameSize = outerFrameSize + innerFrameSize;
+
+            const socialBarHeight = canvas.height * 0.08;
+            const mainBannerHeight = canvas.height * 0.22;
+            
+            const imageX = totalFrameSize;
+            const imageY = totalFrameSize;
+            const imageWidth = canvas.width - totalFrameSize * 2;
+            const imageHeight = canvas.height - totalFrameSize * 2 - mainBannerHeight - socialBarHeight;
+            
+            // Draw frames
+            ctx.fillStyle = frameColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(outerFrameSize, outerFrameSize, canvas.width - outerFrameSize * 2, canvas.height - outerFrameSize * 2);
+
+            // Draw image
+            const sourceAspectRatio = baseImage.width / baseImage.height;
+            const destAspectRatio = imageWidth / imageHeight;
+            let sx, sy, sWidth, sHeight;
+            if (sourceAspectRatio > destAspectRatio) {
+                sHeight = baseImage.height;
+                sWidth = sHeight * destAspectRatio;
+                sx = (baseImage.width - sWidth) / 2;
+                sy = 0;
+            } else {
+                sWidth = baseImage.width;
+                sHeight = sWidth / destAspectRatio;
+                sx = 0;
+                sy = (baseImage.height - sHeight) / 2;
+            }
+            ctx.drawImage(baseImage, sx, sy, sWidth, sHeight, imageX, imageY, imageWidth, imageHeight);
+            
+            // Draw Logo on top of image
+             if (logoImage) {
+                const logoMaxHeight = imageHeight * 0.2;
+                const logoMaxWidth = imageWidth * 0.3;
+                const logoAspectRatio = logoImage.width / logoImage.height;
+
+                let logoHeight = logoMaxHeight;
+                let logoWidth = logoHeight * logoAspectRatio;
+
+                if (logoWidth > logoMaxWidth) {
+                    logoWidth = logoMaxWidth;
+                    logoHeight = logoWidth / logoAspectRatio;
+                }
+
+                const logoX = imageX + (imageWidth - logoWidth) / 2;
+                const logoY = imageY + imageHeight - logoHeight - (padding * 0.5);
+                ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+            }
+
+            // Draw main banner
+            const mainBannerY = canvas.height - socialBarHeight - mainBannerHeight;
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(0, mainBannerY, canvas.width, mainBannerHeight);
+            
+            // Draw Social Bar
+            const socialBarY = canvas.height - socialBarHeight;
+            ctx.fillStyle = frameColor;
+            ctx.fillRect(0, socialBarY, canvas.width, socialBarHeight);
+            drawSocialHandles(ctx, socialHandles, socialBarY + socialBarHeight / 2);
+
+            // Draw Headline with accent colors
+            const headlineBox = { x: padding, y: mainBannerY, width: canvas.width - padding * 2, height: mainBannerHeight };
+            const baseFontSize = Math.max(24, Math.round(canvas.width / 20));
+            let fontSize = baseFontSize * fontSizeMultiplier;
+            let lines: { text: string, width: number }[] = [];
+            let lineHeight: number;
+            let textBlockHeight: number;
+            
+            const words = headline.toUpperCase().split(' ');
+
+            do {
+                ctx.font = `900 ${fontSize}px ${fontFamily}`;
+                lineHeight = fontSize * 1.15;
+                let line = '';
+                lines = [];
+                for (const word of words) {
+                    const testLine = line + word + ' ';
+                    if (ctx.measureText(testLine).width > headlineBox.width && line.length > 0) {
+                        lines.push({ text: line.trim(), width: ctx.measureText(line.trim()).width });
+                        line = word + ' ';
+                    } else {
+                        line = testLine;
+                    }
+                }
+                lines.push({ text: line.trim(), width: ctx.measureText(line.trim()).width });
+                textBlockHeight = (lines.length * lineHeight) - (lineHeight - fontSize * 1.05);
+                if (textBlockHeight > headlineBox.height) {
+                    fontSize -= 2;
+                }
+            } while (textBlockHeight > headlineBox.height && fontSize > 20);
+            
+            let textBlockY;
+             if (vAlign === 'top') {
+                textBlockY = headlineBox.y;
+            } else if (vAlign === 'center') {
+                textBlockY = headlineBox.y + (headlineBox.height - textBlockHeight) / 2;
+            } else { // 'bottom'
+                textBlockY = headlineBox.y + headlineBox.height - textBlockHeight;
+            }
+            
+            ctx.textBaseline = 'top';
+            ctx.font = `900 ${fontSize}px ${fontFamily}`;
+            const textIsRtl = isRtl(headline);
+            ctx.direction = textIsRtl ? 'rtl' : 'ltr';
+
+            let wordCounter = 0;
+            lines.forEach((line, i) => {
+                const lineY = textBlockY + (i * lineHeight);
+                let currentX = headlineBox.x + (headlineBox.width - line.width) / 2;
+                
+                if (textIsRtl) {
+                    currentX += line.width;
+                }
+
+                const wordsInLine = line.text.split(' ');
+                ctx.textAlign = textIsRtl ? 'right' : 'left';
+
+                wordsInLine.forEach(word => {
+                    if (word.trim() === '') return;
+                    
+                    ctx.fillStyle = wordCounter < accentWordCount ? accentTextColor : textColor;
+                    if (textShadow) {
+                      ctx.save();
+                      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                      ctx.shadowBlur = 6;
+                      ctx.shadowOffsetX = 0;
+                      ctx.shadowOffsetY = 3;
+                    }
+
+                    if (textIsRtl) {
+                        ctx.fillText(word, currentX, lineY);
+                        currentX -= ctx.measureText(word + ' ').width;
+                    } else {
+                        ctx.fillText(word, currentX, lineY);
+                        currentX += ctx.measureText(word + ' ').width;
+                    }
+                    if (textShadow) {
+                      ctx.restore();
+                    }
+                    wordCounter++;
+                });
+            });
+        };
 
         const drawTopBarTemplate = () => {
             ctx.fillStyle = '#111827';
@@ -721,6 +875,9 @@ const App: React.FC = () => {
         switch (template) {
           case 'rt-news':
             drawRtNewsTemplate();
+            break;
+          case 'stv-news':
+            drawStvNewsTemplate();
             break;
           case 'top-bar':
             drawTopBarTemplate();
